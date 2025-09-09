@@ -1,0 +1,44 @@
+{
+  "item.multiblockprojector.projector": "Multiblock Projector",
+  "item.multiblockprojector.projector.specific": "Multiblock Projector (%s)",
+  
+  "itemGroup.multiblockprojector.main": "Multiblock Projector",
+  
+  "desc.multiblockprojector.info.projector.build0": "Projects multiblock structures from any mod",
+  "desc.multiblockprojector.info.projector.build1": "Selected: %s",
+  "desc.multiblockprojector.info.projector.mod": "From: %s",
+  "desc.multiblockprojector.info.projector.noMultiblock": "No multiblock selected - Right click to choose",
+  "desc.multiblockprojector.info.projector.usage": "Right click: Select multiblock | Shift + Right click: Switch modes",
+  "desc.multiblockprojector.info.projector.hint.nothing_selected": "Right Click to select a multiblock",
+  "desc.multiblockprojector.info.projector.hint.projection": "Right Click: Rotate | Left Click: Place | Sneak + Right Click: Cancel | ESC: Cancel",
+  "desc.multiblockprojector.info.projector.hint.building": "Right Click: Cancel building mode | Build the structure to complete",
+  
+  "desc.multiblockprojector.info.projector.mode_0": "Nothing Selected",
+  "desc.multiblockprojector.info.projector.mode_1": "Multiblock Selection Mode",
+  "desc.multiblockprojector.info.projector.mode_2": "Projection Mode", 
+  "desc.multiblockprojector.info.projector.mode_3": "Building Mode",
+  
+  "desc.multiblockprojector.info.projector.size": "Size: %dx%dx%d",
+  "desc.multiblockprojector.info.projector.center": "Center: %d, %d, %d",
+  "desc.multiblockprojector.info.projector.rotated.north": "Facing North",
+  "desc.multiblockprojector.info.projector.rotated.south": "Facing South", 
+  "desc.multiblockprojector.info.projector.rotated.east": "Facing East",
+  "desc.multiblockprojector.info.projector.rotated.west": "Facing West",
+  "desc.multiblockprojector.info.projector.flipped.true": "Mirrored: Yes",
+  "desc.multiblockprojector.info.projector.flipped.false": "Mirrored: No",
+  
+  "gui.multiblockprojector.projector.button.confirm": "Confirm Selection",
+  "gui.multiblockprojector.projector.button.cancel": "Cancel",
+  "gui.multiblockprojector.projector.button.mirror": "Mirror Structure",
+  "gui.multiblockprojector.projector.button.rcw": "Rotate Clockwise",
+  "gui.multiblockprojector.projector.button.rccw": "Rotate Counter-Clockwise",
+  "gui.multiblockprojector.projector.search": "Search multiblocks...",
+  "gui.multiblockprojector.projector": "Multiblock Projector",
+  "gui.multiblockprojector.select_multiblock": "Select a multiblock structure:",
+  "gui.multiblockprojector.selected": "Selected: %s",
+  "gui.multiblockprojector.tooltip": "Mod: %s",
+  "gui.multiblockprojector.projection_created": "Projection created: %s",
+  
+  "key.categories.multiblockprojector": "Multiblock Projector",
+  "key.multiblockprojector.projector.flip": "Flip Projection"
+}

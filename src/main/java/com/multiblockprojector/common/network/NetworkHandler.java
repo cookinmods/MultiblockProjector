@@ -1,0 +1,46 @@
+package com.multiblockprojector.common.network;
+
+import com.multiblockprojector.UniversalProjector;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.handling.DirectionalPayloadHandler;
+import net.neoforged.neoforge.network.handling.IPayloadContext;
+
+/**
+ * Network handler for Universal Projector mod packets
+ */
+@EventBusSubscriber(modid = UniversalProjector.MODID, bus = EventBusSubscriber.Bus.MOD)
+public class NetworkHandler {
+    
+    @SubscribeEvent
+    public static void registerPayloads(RegisterPayloadHandlersEvent event) {
+        var registrar = event.registrar(UniversalProjector.MODID);
+        
+        registrar.playBidirectional(
+            MessageProjectorSync.TYPE,
+            MessageProjectorSync.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(
+                NetworkHandler::handleClientSide,
+                NetworkHandler::handleServerSide
+            )
+        );
+    }
+    
+    private static void handleClientSide(MessageProjectorSync packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() != null) {
+                MessageProjectorSync.handleClientSide(packet, context.player());
+            }
+        });
+    }
+    
+    private static void handleServerSide(MessageProjectorSync packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() != null) {
+                MessageProjectorSync.handleServerSide(packet, context.player());
+            }
+        });
+    }
+}

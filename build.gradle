@@ -1,0 +1,131 @@
+plugins {
+    id('java')
+    id('eclipse')
+    id('idea')
+    id('maven-publish')
+    id('net.neoforged.moddev') version('2.0.88')
+}
+
+tasks.named('wrapper', Wrapper) {
+    gradleVersion = '8.14.1'
+    distributionType = Wrapper.DistributionType.ALL
+}
+
+defaultTasks('build')
+
+idea {
+    module {
+        for (String excludeDirName : ['runs', 'out', 'logs', 'gradle']) {
+            excludeDirs.add(file(excludeDirName))
+        }
+        downloadJavadoc = true
+        downloadSources = true
+    }
+}
+
+group = 'com.multiblockprojector'
+def basicVersion = "${mod_version}." + (System.getenv('BUILD_NUMBER') ?: 'homebaked')
+version = "${minecraft_version}-${basicVersion}"
+project.base.archivesName = 'MultiblockProjector'
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of("${java_version}"))
+    }
+    withSourcesJar()
+}
+
+sourceSets.main.resources { 
+    srcDir 'src/generated/resources' 
+}
+
+final runsFolder = layout.projectDirectory.dir('runs')
+
+neoForge {
+    enable {
+        version = neo_version
+    }
+
+    mods {
+        multiblockprojector {
+            sourceSet sourceSets.main
+        }
+    }
+
+    runs {
+        configureEach {
+            if (project.hasProperty('forge_force_ansi')) {
+                systemProperties.put('terminal.ansi', (String) property('forge_force_ansi'))
+            }
+        }
+        
+        client {
+            client()
+            gameDirectory.value(runsFolder.dir('client'))
+        }
+        
+        server {
+            server()
+            gameDirectory.value(runsFolder.dir('server'))
+        }
+        
+        data {
+            data()
+            gameDirectory.value(runsFolder.dir('data'))
+            programArguments.addAll('--all', '--output', file('src/generated/resources/').absolutePath,
+                    '--mod', 'multiblockprojector', '--existing', file('src/main/resources/').absolutePath)
+        }
+    }
+}
+
+repositories {
+    maven {
+        name = 'BlameJared Maven (CrT / Bookshelf)'
+        url = 'https://maven.blamejared.com'
+        content {
+            includeGroup 'mezz.jei'
+            includeGroup 'blusunrize.immersiveengineering'
+        }
+    }
+    flatDir {
+        dirs "libs"
+    }
+}
+
+dependencies {
+    // JEI for testing
+    compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
+    runtimeOnly("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}")
+
+    // IE and Mekanism from libs folder
+    implementation files('libs/ImmersiveEngineering-1.21.1-12.4.3-194.jar')
+    implementation files('libs/Mekanism-1.21.1-10.7.14.homebaked.jar')
+    implementation files('libs/MekanismAdditions-1.21.1-10.7.14.homebaked.jar')
+    implementation files('libs/MekanismGenerators-1.21.1-10.7.14.homebaked.jar')
+    implementation files('libs/MekanismTools-1.21.1-10.7.14.homebaked.jar')
+
+    // Missing dependencies commented out for now
+    //implementation "curse.maven:VicsPointBlank-961053:6028992"
+    //implementation "curse.maven:geckolib-388172:6659026"
+}
+
+tasks.withType(ProcessResources).configureEach {
+    var replaceProperties = [
+            minecraft_version   : findProperty('minecraft_version'),
+            minecraft_version_range: findProperty('minecraft_version_range'),
+            neo_version         : findProperty('neo_version'),
+            neo_version_range   : findProperty('neo_version_range'),
+            loader_version_range: findProperty('loader_version_range'),
+            mod_id              : findProperty('mod_id'),
+            mod_name            : findProperty('mod_name'),
+            mod_license         : findProperty('mod_license'),
+            mod_version         : findProperty('mod_version'),
+            mod_authors         : findProperty('mod_authors'),
+            mod_description     : findProperty('mod_description'),
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/neoforge.mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties
+    }
+}

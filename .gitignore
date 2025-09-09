@@ -1,0 +1,62 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+
+# Eclipse
+.project
+.classpath
+.settings/
+bin/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# NetBeans
+nbproject/
+nbbuild/
+nbdist/
+nbactions.xml
+
+# VS Code
+.vscode/
+
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# Logs
+logs/
+*.log
+
+# Runtime directories
+run/
+runs/
+
+# Other
+.cache/
+.vscode/
+*.launch
+
+# Mod development
+src/generated/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# User-specific files
+local.properties
