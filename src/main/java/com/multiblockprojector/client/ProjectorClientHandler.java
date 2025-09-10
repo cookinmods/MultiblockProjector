@@ -1,6 +1,7 @@
 package com.multiblockprojector.client;
 
 import com.multiblockprojector.UniversalProjector;
+import com.multiblockprojector.api.UniversalMultiblockHandler;
 import com.multiblockprojector.client.BlockValidationManager;
 import com.multiblockprojector.common.items.ProjectorItem;
 import com.multiblockprojector.common.projector.MultiblockProjection;
@@ -20,6 +21,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.network.chat.Component;
 
@@ -30,11 +32,19 @@ import net.minecraft.network.chat.Component;
 public class ProjectorClientHandler {
     
     private static BlockPos lastAimPos = null;
+    private static boolean multiblocksDiscovered = false;
     
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
+        
+        // Discover multiblocks on first client tick with level
+        if (!multiblocksDiscovered) {
+            UniversalProjector.LOGGER.info("Client world loaded - discovering multiblocks...");
+            UniversalMultiblockHandler.discoverMultiblocks();
+            multiblocksDiscovered = true;
+        }
         
         Player player = mc.player;
         ItemStack held = player.getMainHandItem();

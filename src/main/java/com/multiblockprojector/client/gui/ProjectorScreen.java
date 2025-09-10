@@ -57,11 +57,16 @@ public class ProjectorScreen extends Screen {
             
             IUniversalMultiblock multiblock = availableMultiblocks.get(index);
             
+            // Account for scrollbar space if needed
+            int buttonWidth = availableMultiblocks.size() > ENTRIES_PER_PAGE ? 
+                leftPanelWidth - 30 - 10 : // Leave space for scrollbar
+                leftPanelWidth - 30;       // No scrollbar needed
+            
             Button button = Button.builder(
                 multiblock.getDisplayName(),
                 (btn) -> selectMultiblockForPreview(multiblock)
             )
-            .bounds(10, startY + i * ENTRY_HEIGHT, leftPanelWidth - 30, 18)
+            .bounds(10, startY + i * ENTRY_HEIGHT, buttonWidth, 18)
             .build();
             
             this.addRenderableWidget(button);
@@ -72,11 +77,15 @@ public class ProjectorScreen extends Screen {
         // Add select button at bottom
         int buttonY = startY + ENTRIES_PER_PAGE * ENTRY_HEIGHT + 20;
         
-        // Select button (centered)
+        // Select button (account for scrollbar space)
+        int selectButtonWidth = availableMultiblocks.size() > ENTRIES_PER_PAGE ? 
+            leftPanelWidth - 20 - 10 : // Leave space for scrollbar
+            leftPanelWidth - 20;       // No scrollbar needed
+        
         this.addRenderableWidget(Button.builder(
             Component.translatable("gui.multiblockprojector.select"),
             (btn) -> selectMultiblock(selectedMultiblock)
-        ).bounds(10, buttonY, leftPanelWidth - 20, 20).build());
+        ).bounds(10, buttonY, selectButtonWidth, 20).build());
     }
     
     private void selectMultiblockForPreview(IUniversalMultiblock multiblock) {
@@ -138,6 +147,14 @@ public class ProjectorScreen extends Screen {
         // Center the preview in the right panel
         int previewX = leftPanelWidth + previewMargin;
         int previewY = previewMargin;
+        
+        // Draw selected multiblock name above preview
+        if (selectedMultiblock != null) {
+            Component selectedName = selectedMultiblock.getDisplayName();
+            int textX = previewX + previewWidth / 2;
+            int textY = previewY - 15;
+            guiGraphics.drawCenteredString(this.font, selectedName, textX, textY, 0xFFFFFF);
+        }
         
         // Draw preview background
         guiGraphics.fill(previewX - 2, previewY - 2, previewX + previewWidth + 2, previewY + previewHeight + 2, 0xFF333333);

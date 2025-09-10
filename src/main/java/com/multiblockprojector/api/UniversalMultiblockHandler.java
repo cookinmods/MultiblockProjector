@@ -2,6 +2,8 @@ package com.multiblockprojector.api;
 
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.api.adapters.IEMultiblockAdapter;
+// TEMPORARILY DISABLED FOR DEBUGGING
+// import com.multiblockprojector.api.adapters.MekanismMultiblockAdapter;
 import net.minecraft.resources.ResourceLocation;
 
 import javax.annotation.Nullable;
@@ -23,6 +25,13 @@ public class UniversalMultiblockHandler {
      * Register a multiblock with the universal handler
      */
     public static synchronized void registerMultiblock(IUniversalMultiblock multiblock) {
+        // Prevent duplicate registration
+        if (BY_NAME.containsKey(multiblock.getUniqueName())) {
+            UniversalProjector.LOGGER.debug("Multiblock {} already registered, skipping duplicate", 
+                multiblock.getUniqueName());
+            return;
+        }
+        
         MULTIBLOCKS.add(multiblock);
         BY_NAME.put(multiblock.getUniqueName(), multiblock);
         BY_MOD.computeIfAbsent(multiblock.getModId(), k -> new ArrayList<>()).add(multiblock);
@@ -32,10 +41,12 @@ public class UniversalMultiblockHandler {
     }
     
     /**
-     * @return All registered multiblocks
+     * @return All registered multiblocks in alphabetical order
      */
     public static List<IUniversalMultiblock> getMultiblocks() {
-        return new ArrayList<>(MULTIBLOCKS);
+        List<IUniversalMultiblock> sorted = new ArrayList<>(MULTIBLOCKS);
+        sorted.sort((a, b) -> a.getDisplayName().getString().compareToIgnoreCase(b.getDisplayName().getString()));
+        return sorted;
     }
     
     /**
@@ -72,14 +83,41 @@ public class UniversalMultiblockHandler {
             }
         }
         
-        // TODO: Add adapters for other mods (Create, Mekanism, etc.)
+        // Try to load Mekanism multiblocks if available
+        // TEMPORARILY DISABLED FOR DEBUGGING - FOCUS ON OTHER MODS FIRST
+        /*
+        if (isModLoaded("mekanism")) {
+            UniversalProjector.LOGGER.info("Mekanism mod detected, loading multiblocks...");
+            try {
+                int beforeCount = MULTIBLOCKS.size();
+                MekanismMultiblockAdapter.registerMekanismMultiblocks();
+                int mekanismCount = MULTIBLOCKS.size() - beforeCount;
+                realMultiblocksFound += mekanismCount;
+                UniversalProjector.LOGGER.info("Successfully loaded {} Mekanism multiblocks", mekanismCount);
+            } catch (Exception e) {
+                UniversalProjector.LOGGER.error("Failed to load Mekanism multiblocks", e);
+            }
+        } else {
+            UniversalProjector.LOGGER.info("Mekanism mod not detected");
+        }
+        */
+        
+        // TODO: Add adapters for other mods (Create, etc.)
         
         // Only register test multiblocks if no real multiblocks were found
-        if (realMultiblocksFound == 0) {
+        // Check total registered multiblocks instead of just this call's count to handle duplicate calls
+        int totalRealMultiblocks = 0;
+        for (IUniversalMultiblock mb : MULTIBLOCKS) {
+            if (!mb.getModId().equals("multiblockprojector")) { // Not test multiblocks
+                totalRealMultiblocks++;
+            }
+        }
+        
+        if (totalRealMultiblocks == 0) {
             UniversalProjector.LOGGER.info("No real multiblocks found, registering test multiblocks for development");
             TestMultiblock.registerTestMultiblocks();
         } else {
-            UniversalProjector.LOGGER.info("Found {} real multiblocks, skipping test multiblocks", realMultiblocksFound);
+            UniversalProjector.LOGGER.info("Found {} real multiblocks, skipping test multiblocks", totalRealMultiblocks);
         }
         
         UniversalProjector.LOGGER.info("Discovered {} total multiblocks from {} mods", 

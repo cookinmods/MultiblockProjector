@@ -70,10 +70,29 @@ public class IEMultiblockAdapter {
         @SuppressWarnings("unchecked")
         public List<StructureBlockInfo> getStructure(@Nonnull Level world) {
             try {
-                return (List<StructureBlockInfo>) ieMultiblock.getClass()
+                List<StructureBlockInfo> structure = (List<StructureBlockInfo>) ieMultiblock.getClass()
                     .getMethod("getStructure", Level.class)
                     .invoke(ieMultiblock, world);
+                
+                // Debug output
+                System.out.println("IE Multiblock (" + getUniqueName() + ") structure has " + structure.size() + " blocks");
+                if (!structure.isEmpty()) {
+                    StructureBlockInfo first = structure.get(0);
+                    System.out.println("First block: " + first.state().getBlock().getClass().getSimpleName() + " at " + first.pos());
+                    
+                    // Check for cauldrons (the problem block)
+                    long cauldronCount = structure.stream()
+                        .map(info -> info.state().getBlock())
+                        .filter(block -> block.getClass().getSimpleName().contains("Cauldron"))
+                        .count();
+                    if (cauldronCount > 0) {
+                        System.out.println("WARNING: Found " + cauldronCount + " cauldron blocks in " + getUniqueName());
+                    }
+                }
+                
+                return structure;
             } catch (Exception e) {
+                System.err.println("Failed to get structure for IE multiblock " + getUniqueName() + ": " + e.getMessage());
                 throw new RuntimeException("Failed to get structure", e);
             }
         }

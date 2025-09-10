@@ -26,7 +26,7 @@ public class TestMultiblock implements IUniversalMultiblock {
     public static final TestMultiblock SMALL_TOWER = new TestMultiblock(
         ResourceLocation.fromNamespaceAndPath("multiblockprojector", "test_tower"),
         "Test Tower", 
-        1, 5, 1
+        1, 8, 1
     );
     
     private final ResourceLocation name;
@@ -80,14 +80,10 @@ public class TestMultiblock implements IUniversalMultiblock {
                 }
             }
         } else if (name.getPath().equals("test_tower")) {
-            // Create a simple 1x5x1 tower
-            for (int y = 0; y < 5; y++) {
+            // Create a simple 1x8x1 cobblestone tower
+            for (int y = 0; y < 8; y++) {
                 BlockPos pos = new BlockPos(0, y, 0);
-                if (y == 0 || y == 4) {
-                    blocks.add(new StructureBlockInfo(pos, Blocks.STONE_BRICKS.defaultBlockState(), null));
-                } else {
-                    blocks.add(new StructureBlockInfo(pos, Blocks.STONE.defaultBlockState(), null));
-                }
+                blocks.add(new StructureBlockInfo(pos, Blocks.COBBLESTONE.defaultBlockState(), null));
             }
         }
         
