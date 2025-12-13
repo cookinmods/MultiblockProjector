@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Transformation;
 import com.multiblockprojector.api.IUniversalMultiblock;
+import com.multiblockprojector.api.IVariableSizeMultiblock;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -40,12 +41,31 @@ public class SimpleMultiblockPreviewRenderer {
     }
     
     public void setMultiblock(IUniversalMultiblock multiblock) {
-        if (this.multiblock != multiblock) {
+        setMultiblock(multiblock, null);
+    }
+
+    /**
+     * Set the multiblock to preview with an optional specific size.
+     * @param multiblock The multiblock to preview
+     * @param specificSize For variable-size multiblocks, the size to render at. If null, uses default size.
+     */
+    public void setMultiblock(IUniversalMultiblock multiblock, Vec3i specificSize) {
+        // Force refresh if size changed, even for same multiblock
+        boolean sizeChanged = specificSize != null && !specificSize.equals(this.size);
+
+        if (this.multiblock != multiblock || sizeChanged) {
             this.multiblock = multiblock;
             if (multiblock != null && level != null) {
                 try {
-                    this.structure = multiblock.getStructure(level);
-                    this.size = multiblock.getSize(level);
+                    // Use specific size for variable-size multiblocks
+                    if (specificSize != null && multiblock instanceof IVariableSizeMultiblock varMultiblock) {
+                        this.structure = varMultiblock.getStructureAtSize(level, specificSize);
+                        this.size = specificSize;
+                    } else {
+                        this.structure = multiblock.getStructure(level);
+                        this.size = multiblock.getSize(level);
+                    }
+
                     if (structure != null && !structure.isEmpty()) {
                         this.maxBlockIndex = structure.size();
                         this.blockIndex = maxBlockIndex;

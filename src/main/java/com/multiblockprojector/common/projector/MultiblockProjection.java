@@ -1,6 +1,7 @@
 package com.multiblockprojector.common.projector;
 
 import com.multiblockprojector.api.IUniversalMultiblock;
+import com.multiblockprojector.api.IVariableSizeMultiblock;
 import it.unimi.dsi.fastutil.ints.Int2ObjectArrayMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.minecraft.core.BlockPos;
@@ -33,20 +34,38 @@ public class MultiblockProjection {
     final Int2ObjectMap<List<StructureTemplate.StructureBlockInfo>> layers = new Int2ObjectArrayMap<>();
     final BlockPos.MutableBlockPos offset = new BlockPos.MutableBlockPos();
     final int blockcount;
+    final Vec3i customSize; // For variable-size multiblocks
     boolean isDirty = true;
-    
+
     public MultiblockProjection(@Nonnull Level world, @Nonnull IUniversalMultiblock multiblock) {
+        this(world, multiblock, null);
+    }
+
+    /**
+     * Create a projection with an optional custom size for variable-size multiblocks.
+     * @param world The world
+     * @param multiblock The multiblock to project
+     * @param customSize For variable-size multiblocks, the specific size to use. Null for default size.
+     */
+    public MultiblockProjection(@Nonnull Level world, @Nonnull IUniversalMultiblock multiblock, Vec3i customSize) {
         Objects.requireNonNull(world, "World cannot be null!");
         Objects.requireNonNull(multiblock, "Multiblock cannot be null!");
-        
+
         this.multiblock = multiblock;
         this.realWorld = world;
-        
-        List<StructureTemplate.StructureBlockInfo> blocks = multiblock.getStructure(world);
-        
+        this.customSize = customSize;
+
+        // Get structure at specific size for variable-size multiblocks
+        List<StructureTemplate.StructureBlockInfo> blocks;
+        if (customSize != null && multiblock instanceof IVariableSizeMultiblock varMultiblock) {
+            blocks = varMultiblock.getStructureAtSize(world, customSize);
+        } else {
+            blocks = multiblock.getStructure(world);
+        }
+
         // Create template world using IE's TemplateWorldCreator if available
         this.templateWorld = createTemplateWorld(blocks);
-        
+
         this.blockcount = blocks.size();
         for (StructureTemplate.StructureBlockInfo info : blocks) {
             int layer = info.pos().getY();
@@ -127,6 +146,23 @@ public class MultiblockProjection {
     public IUniversalMultiblock getMultiblock() {
         return this.multiblock;
     }
+
+    /**
+     * Helper to get the size Vec3i for a multiblock based on settings.
+     * Returns null for non-variable-size multiblocks.
+     */
+    public static Vec3i getSizeFromSettings(IUniversalMultiblock multiblock, Settings settings) {
+        if (multiblock instanceof IVariableSizeMultiblock varMultiblock) {
+            var presets = varMultiblock.getSizePresets();
+            int index = settings.getSizePresetIndex();
+            if (!presets.isEmpty() && index >= 0 && index < presets.size()) {
+                return presets.get(index).size();
+            } else if (!presets.isEmpty()) {
+                return presets.get(0).size();
+            }
+        }
+        return null;
+    }
     
     @Override
     public boolean equals(Object obj) {
@@ -178,10 +214,11 @@ public class MultiblockProjection {
     private void updateData() {
         if (!this.isDirty) return;
         this.isDirty = false;
-        
+
         boolean mirrored = this.settings.getMirror() == Mirror.FRONT_BACK;
         Rotation rotation = this.settings.getRotation();
-        Vec3i size = this.multiblock.getSize(this.realWorld);
+        // Use custom size if set, otherwise get from multiblock
+        Vec3i size = this.customSize != null ? this.customSize : this.multiblock.getSize(this.realWorld);
         
         // Align corners first
         if (!mirrored) {

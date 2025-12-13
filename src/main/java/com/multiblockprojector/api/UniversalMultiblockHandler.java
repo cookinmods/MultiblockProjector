@@ -2,8 +2,7 @@ package com.multiblockprojector.api;
 
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.api.adapters.IEMultiblockAdapter;
-// TEMPORARILY DISABLED FOR DEBUGGING
-// import com.multiblockprojector.api.adapters.MekanismMultiblockAdapter;
+import com.multiblockprojector.api.adapters.MekanismMultiblockAdapter;
 import net.minecraft.resources.ResourceLocation;
 
 import javax.annotation.Nullable;
@@ -84,23 +83,20 @@ public class UniversalMultiblockHandler {
         }
         
         // Try to load Mekanism multiblocks if available
-        // TEMPORARILY DISABLED FOR DEBUGGING - FOCUS ON OTHER MODS FIRST
-        /*
         if (isModLoaded("mekanism")) {
             UniversalProjector.LOGGER.info("Mekanism mod detected, loading multiblocks...");
             try {
                 int beforeCount = MULTIBLOCKS.size();
-                MekanismMultiblockAdapter.registerMekanismMultiblocks();
+                MekanismMultiblockAdapter.registerAllMultiblocks();
                 int mekanismCount = MULTIBLOCKS.size() - beforeCount;
                 realMultiblocksFound += mekanismCount;
-                UniversalProjector.LOGGER.info("Successfully loaded {} Mekanism multiblocks", mekanismCount);
+                UniversalProjector.LOGGER.info("Successfully loaded {} Mekanism multiblock(s)", mekanismCount);
             } catch (Exception e) {
                 UniversalProjector.LOGGER.error("Failed to load Mekanism multiblocks", e);
             }
         } else {
             UniversalProjector.LOGGER.info("Mekanism mod not detected");
         }
-        */
         
         // TODO: Add adapters for other mods (Create, etc.)
         

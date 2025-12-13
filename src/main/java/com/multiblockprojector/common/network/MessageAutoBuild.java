@@ -77,7 +77,8 @@ public class MessageAutoBuild implements CustomPacketPayload {
     
     private static void performAutoBuild(Player player, Settings settings, ItemStack held, BlockPos pos) {
         // Create the projection to get block positions and states
-        MultiblockProjection projection = new MultiblockProjection(player.level(), settings.getMultiblock());
+        var size = MultiblockProjection.getSizeFromSettings(settings.getMultiblock(), settings);
+        MultiblockProjection projection = new MultiblockProjection(player.level(), settings.getMultiblock(), size);
         projection.setRotation(settings.getRotation());
         projection.setFlip(settings.isMirrored());
         

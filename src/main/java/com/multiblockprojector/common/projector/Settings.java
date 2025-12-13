@@ -32,13 +32,15 @@ public class Settings {
     public static final String KEY_ROTATION = "rotation";
     public static final String KEY_POSITION = "pos";
     public static final String KEY_AUTO_BUILD = "autoBuild";
-    
+    public static final String KEY_SIZE_PRESET = "sizePreset";
+
     private Mode mode;
     private Rotation rotation;
     private BlockPos pos = null;
     private IUniversalMultiblock multiblock = null;
     private boolean mirror;
     private boolean isPlaced;
+    private int sizePresetIndex = 0;
     
     public Settings() {
         this(new CompoundTag());
@@ -64,17 +66,19 @@ public class Settings {
             this.rotation = Rotation.NONE;
             this.mirror = false;
             this.isPlaced = false;
+            this.sizePresetIndex = 0;
         } else {
             this.mode = Mode.values()[Mth.clamp(settingsNbt.getInt(KEY_MODE), 0, Mode.values().length - 1)];
             this.rotation = Rotation.values()[settingsNbt.contains(KEY_ROTATION) ? settingsNbt.getInt(KEY_ROTATION) : 0];
             this.mirror = settingsNbt.getBoolean(KEY_MIRROR);
             this.isPlaced = settingsNbt.getBoolean(KEY_PLACED);
-            
+            this.sizePresetIndex = settingsNbt.getInt(KEY_SIZE_PRESET);
+
             if (settingsNbt.contains(KEY_MULTIBLOCK, Tag.TAG_STRING)) {
                 String str = settingsNbt.getString(KEY_MULTIBLOCK);
                 this.multiblock = UniversalMultiblockHandler.getByUniqueName(ResourceLocation.parse(str));
             }
-            
+
             if (settingsNbt.contains(KEY_POSITION, Tag.TAG_COMPOUND)) {
                 CompoundTag pos = settingsNbt.getCompound(KEY_POSITION);
                 int x = pos.getInt("x");
@@ -132,18 +136,22 @@ public class Settings {
     @Nullable
     public BlockPos getPos() { return this.pos; }
     public void setPos(@Nullable BlockPos pos) { this.pos = pos; }
-    
+
+    public int getSizePresetIndex() { return this.sizePresetIndex; }
+    public void setSizePresetIndex(int index) { this.sizePresetIndex = Math.max(0, index); }
+
     public CompoundTag toNbt() {
         CompoundTag nbt = new CompoundTag();
         nbt.putInt(KEY_MODE, this.mode.ordinal());
         nbt.putInt(KEY_ROTATION, this.rotation.ordinal());
         nbt.putBoolean(KEY_MIRROR, this.mirror);
         nbt.putBoolean(KEY_PLACED, this.isPlaced);
-        
+        nbt.putInt(KEY_SIZE_PRESET, this.sizePresetIndex);
+
         if (this.multiblock != null) {
             nbt.putString(KEY_MULTIBLOCK, this.multiblock.getUniqueName().toString());
         }
-        
+
         if (this.pos != null) {
             CompoundTag pos = new CompoundTag();
             pos.putInt("x", this.pos.getX());
@@ -151,7 +159,7 @@ public class Settings {
             pos.putInt("z", this.pos.getZ());
             nbt.put(KEY_POSITION, pos);
         }
-        
+
         return nbt;
     }
     

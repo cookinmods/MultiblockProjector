@@ -41,7 +41,14 @@
   "gui.multiblockprojector.selected": "Selected: %s",
   "gui.multiblockprojector.tooltip": "Mod: %s",
   "gui.multiblockprojector.projection_created": "Projection created: %s",
-  
+
+  "gui.multiblockprojector.size": "Size: %s",
+  "gui.multiblockprojector.size.small": "Small",
+  "gui.multiblockprojector.size.small_medium": "Small-Medium",
+  "gui.multiblockprojector.size.medium": "Medium",
+  "gui.multiblockprojector.size.medium_large": "Medium-Large",
+  "gui.multiblockprojector.size.large": "Large",
+
   "key.categories.multiblockprojector": "Multiblock Projector",
   "key.multiblockprojector.projector.flip": "Flip Projection"
 }

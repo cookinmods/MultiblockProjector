@@ -185,7 +185,7 @@ public class ProjectorClientHandler {
         // Ray trace to find target block
         Vec3 eyePos = player.getEyePosition();
         Vec3 lookVec = player.getLookAngle();
-        Vec3 endPos = eyePos.add(lookVec.scale(10.0)); // 10 block range
+        Vec3 endPos = eyePos.add(lookVec.scale(64.0)); // 64 block range for easier placement
         
         BlockHitResult result = level.clip(new ClipContext(
             eyePos, endPos, 
@@ -205,10 +205,11 @@ public class ProjectorClientHandler {
                 }
                 
                 // Create new projection at target position
-                MultiblockProjection projection = new MultiblockProjection(level, settings.getMultiblock());
+                var size = MultiblockProjection.getSizeFromSettings(settings.getMultiblock(), settings);
+                MultiblockProjection projection = new MultiblockProjection(level, settings.getMultiblock(), size);
                 projection.setRotation(settings.getRotation());
                 projection.setFlip(settings.isMirrored());
-                
+
                 ProjectionManager.setProjection(targetPos, projection);
                 lastAimPos = targetPos;
             }
@@ -224,9 +225,10 @@ public class ProjectorClientHandler {
     private static void placeProjection(Player player, Settings settings, ItemStack held, BlockPos pos) {
         // Swing the projector for visual feedback FIRST
         player.swing(InteractionHand.MAIN_HAND, true); // true = send to server too
-        
+
         // Create the projection at the specified position
-        MultiblockProjection projection = new MultiblockProjection(player.level(), settings.getMultiblock());
+        var size = MultiblockProjection.getSizeFromSettings(settings.getMultiblock(), settings);
+        MultiblockProjection projection = new MultiblockProjection(player.level(), settings.getMultiblock(), size);
         projection.setRotation(settings.getRotation());
         projection.setFlip(settings.isMirrored());
         ProjectionManager.setProjection(pos, projection);
@@ -255,12 +257,13 @@ public class ProjectorClientHandler {
     private static void updateProjectionAtPos(BlockPos pos, Settings settings, Level level) {
         // Remove existing projection
         ProjectionManager.removeProjection(pos);
-        
+
         // Create new projection with updated settings
-        MultiblockProjection projection = new MultiblockProjection(level, settings.getMultiblock());
+        var size = MultiblockProjection.getSizeFromSettings(settings.getMultiblock(), settings);
+        MultiblockProjection projection = new MultiblockProjection(level, settings.getMultiblock(), size);
         projection.setRotation(settings.getRotation());
         projection.setFlip(settings.isMirrored());
-        
+
         ProjectionManager.setProjection(pos, projection);
     }
     

@@ -168,8 +168,9 @@ public class ProjectorItem extends Item {
     
     private void createProjection(BlockPos pos, Settings settings, Level world) {
         if (world.isClientSide && settings.getMultiblock() != null) {
-            // Create the projection
-            MultiblockProjection projection = new MultiblockProjection(world, settings.getMultiblock());
+            // Create the projection with size from settings
+            var size = MultiblockProjection.getSizeFromSettings(settings.getMultiblock(), settings);
+            MultiblockProjection projection = new MultiblockProjection(world, settings.getMultiblock(), size);
             
             // Apply rotation and mirroring from settings
             projection.setRotation(settings.getRotation());
