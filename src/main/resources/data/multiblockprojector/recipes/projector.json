@@ -1,25 +1,23 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "IGI",
-    "RER",
-    "IRI"
+    "CRC",
+    "RIR",
+    "CRC"
   ],
   "key": {
-    "I": {
-      "item": "minecraft:iron_ingot"
-    },
-    "G": {
-      "item": "minecraft:glass"
+    "C": {
+      "item": "minecraft:copper_ingot"
     },
     "R": {
       "item": "minecraft:redstone"
     },
-    "E": {
-      "item": "minecraft:ender_eye"
+    "I": {
+      "item": "minecraft:iron_block"
     }
   },
   "result": {
-    "item": "multiblockprojector:projector"
+    "id": "multiblockprojector:projector",
+    "count": 1
   }
 }
