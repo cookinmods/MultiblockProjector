@@ -1,148 +1,128 @@
-# Plan: Mekanism Fission Reactor Variable-Size Support
+# Blood Magic Altar Support - Cycling Rune Blocks Implementation
 
-## Summary
-Add support for Mekanism's Fission Reactor multiblock with three predefined sizes (Small, Medium, Large) and +/- buttons in the GUI to cycle between them.
+## Overview
+Implement support for Blood Magic altar tiers (1-6) with cycling rune previews and flexible validation that accepts any valid rune type in rune positions.
 
-## Design Decisions (from user input)
-- **Scope**: Start with Fission Reactor only (proof of concept)
-- **Size Options**: Three predefined sizes (min/mid/max) - not continuous scaling
-- **UI Location**: GUI selection screen only
-- **Block Types**: Real Mekanism blocks via reflection, Iron Block fallback
-
-## Fission Reactor Size Presets
-| Size | Dimensions (WxHxD) | Description |
-|------|-------------------|-------------|
-| Small | 3x4x3 | Minimum valid size |
-| Medium | 9x10x9 | Mid-range practical size |
-| Large | 17x18x17 | Near-maximum size |
+## Key Requirements
+1. **Preview Cycling**: Rune positions cycle through acceptable rune types (1 second per rune)
+2. **Tier-Specific Runes**:
+   - Tier 2 altars: Show 11 basic runes only
+   - Tier 3+ altars: Show 21 runes (11 basic + 10 tier-2 variants, no blank tier-2)
+3. **Validation**: Any valid rune type is accepted during building (matches real Blood Magic behavior)
+4. **Creative Mode**: Auto-build places blank runes in all rune positions
+5. **Survival Mode**: Player places any acceptable rune type
 
 ## Implementation Tasks
 
-### Task 1: Create IVariableSizeMultiblock Interface
-**File**: `src/main/java/com/multiblockprojector/api/IVariableSizeMultiblock.java`
+### Task 1: Create ICyclingBlockMultiblock Interface
+**File**: `src/main/java/com/multiblockprojector/api/ICyclingBlockMultiblock.java`
 
-New interface extending `IUniversalMultiblock`:
+New interface extending `IUniversalMultiblock` that defines positions with multiple acceptable block states:
 ```java
-public interface IVariableSizeMultiblock extends IUniversalMultiblock {
-    // Get available size presets
-    List<SizePreset> getSizePresets();
+public interface ICyclingBlockMultiblock extends IUniversalMultiblock {
+    // Get acceptable blocks for a position that should cycle
+    List<BlockState> getAcceptableBlocks(BlockPos structurePos);
 
-    // Get structure at a specific size
-    List<StructureBlockInfo> getStructureAtSize(Level world, Vec3i size);
+    // Check if a position has cycling blocks
+    boolean hasCyclingBlocks(BlockPos structurePos);
 
-    // Check if this multiblock supports variable sizing
-    default boolean isVariableSize() { return true; }
+    // Get the default block for creative auto-build
+    BlockState getDefaultBlock(BlockPos structurePos);
 }
-
-// Inner class or separate class for size presets
-public record SizePreset(String name, Vec3i size, Component displayName) {}
 ```
 
-### Task 2: Re-enable and Refactor Mekanism Adapter
-**File**: `src/main/java/com/multiblockprojector/api/adapters/MekanismFissionReactorAdapter.java`
+### Task 2: Update BloodMagicMultiblockAdapter
+**File**: `src/main/java/com/multiblockprojector/api/adapters/BloodMagicMultiblockAdapter.java`
 
-- Uncomment the file
-- Refactor `FissionReactorMultiblock` to implement `IVariableSizeMultiblock`
-- Define three size presets: Small (3x4x3), Medium (9x10x9), Large (17x18x17)
-- Implement `getStructureAtSize()` to generate correct fission reactor shell
-- Use reflection to get actual Mekanism blocks:
-  - `mekanism.generators.common.registries.GeneratorsBlocks.FISSION_REACTOR_CASING`
-  - `mekanism.generators.common.registries.GeneratorsBlocks.FISSION_REACTOR_PORT`
-  - `mekanism.generators.common.registries.GeneratorsBlocks.FISSION_REACTOR_LOGIC_ADAPTER`
-- Fall back to Iron Block placeholders if reflection fails
-- Register only ONE multiblock (not 8 separate variants)
+Changes:
+- Implement `ICyclingBlockMultiblock` for altar tier classes
+- Load all 21 rune block types via reflection (11 basic + 10 tier-2, no RUNE_2_BLANK)
+- Track which positions are rune positions vs fixed blocks (altar, pillars, capstones)
+- Store rune position set for each altar tier class
+- Return appropriate rune lists based on altar tier:
+  - Tier 2: 11 basic runes (RUNE_BLANK, RUNE_SPEED, etc.)
+  - Tier 3+: 21 runes (basic + RUNE_2_* variants except blank)
+- `getDefaultBlock()` returns blank rune for rune positions
 
-### Task 3: Update UniversalMultiblockHandler
-**File**: `src/main/java/com/multiblockprojector/api/UniversalMultiblockHandler.java`
+Rune Block Registry Names to load:
+- Basic (11): RUNE_BLANK, RUNE_SPEED, RUNE_SACRIFICE, RUNE_SELF_SACRIFICE, RUNE_CAPACITY, RUNE_CAPACITY_AUGMENTED, RUNE_CHARGING, RUNE_ACCELERATION, RUNE_DISLOCATION, RUNE_ORB, RUNE_EFFICIENCY
+- Tier-2 (10): RUNE_2_SPEED, RUNE_2_SACRIFICE, RUNE_2_SELF_SACRIFICE, RUNE_2_CAPACITY, RUNE_2_CAPACITY_AUGMENTED, RUNE_2_CHARGING, RUNE_2_ACCELERATION, RUNE_2_DISLOCATION, RUNE_2_ORB, RUNE_2_EFFICIENCY
 
-- Uncomment Mekanism loading code (lines 87-103)
-- Update import statement (line 6)
-
-### Task 4: Extend Settings Class for Size Selection
-**File**: `src/main/java/com/multiblockprojector/common/projector/Settings.java`
-
-Add:
-- `private int sizePresetIndex = 0;` - Index into size preset list
-- `KEY_SIZE_PRESET = "sizePreset"` constant
-- Getter/setter for size preset index
-- Serialize/deserialize in `toNbt()`/constructor
-
-### Task 5: Update ProjectorScreen GUI with Size Controls
-**File**: `src/main/java/com/multiblockprojector/client/gui/ProjectorScreen.java`
-
-Add size controls when variable-size multiblock is selected:
-- Show current size label (e.g., "Size: Medium (9x10x9)")
-- Add "-" button to go to smaller preset
-- Add "+" button to go to larger preset
-- Disable - at minimum, + at maximum
-- Position: Below the preview in right panel, or near select button
-
-UI layout:
-```
-[Preview Area]
-Size: Medium (9x10x9)
-[ - ]  [ + ]
-```
-
-### Task 6: Update Preview Renderer
+### Task 3: Update SimpleMultiblockPreviewRenderer for Cycling
 **File**: `src/main/java/com/multiblockprojector/client/gui/SimpleMultiblockPreviewRenderer.java`
 
-- Accept size parameter when setting multiblock
-- Call `getStructureAtSize()` for variable-size multiblocks
-- Recalculate scale when size changes
+Changes:
+- Add cycling timer tracking (1 second = 1000ms interval)
+- Track current cycle index (0 to N-1 where N = number of acceptable blocks)
+- In render loop, for each StructureBlockInfo:
+  - Check if multiblock is ICyclingBlockMultiblock
+  - If position has cycling blocks, get current cycled block state based on timer
+  - Render that block instead of the stored block state
+- All cycling positions cycle in sync (same index)
 
-### Task 7: Update Projection System
-**File**: `src/main/java/com/multiblockprojector/common/projector/MultiblockProjection.java`
+### Task 4: Update ProjectionRenderer for World Cycling
+**File**: `src/main/java/com/multiblockprojector/client/render/ProjectionRenderer.java`
 
-- Check if multiblock is `IVariableSizeMultiblock`
-- Use `getStructureAtSize()` with selected preset size
-- Pass size from Settings
+Changes:
+- Add static cycling timer (use System.currentTimeMillis() or game tick)
+- Track global cycle index that updates every 1000ms
+- When rendering ghost blocks:
+  - Check if projection's multiblock is ICyclingBlockMultiblock
+  - For cycling positions, get current cycled block state
+  - Render that block as the ghost
 
-### Task 8: Update Network Sync
-**File**: `src/main/java/com/multiblockprojector/common/network/MessageProjectorSync.java`
+### Task 5: Update BlockValidationManager for Flexible Validation
+**File**: `src/main/java/com/multiblockprojector/client/BlockValidationManager.java`
 
-- Size preset index is already in Settings NBT
-- No additional changes needed if Settings serialization is correct
+Changes:
+- Modify `blocksMatch()` method to handle cycling blocks
+- For `ICyclingBlockMultiblock`:
+  - Get list of acceptable blocks for position
+  - Check if placed block matches ANY of the acceptable blocks
+  - Return valid if any match
+- Non-cycling positions (altar, pillars, caps) use existing exact match logic
 
-### Task 9: Add Language Keys
-**File**: `src/main/resources/assets/multiblockprojector/lang/en_us.json`
+### Task 6: Update MessageAutoBuild for Creative Auto-Build
+**File**: `src/main/java/com/multiblockprojector/common/network/MessageAutoBuild.java`
 
-Add:
-```json
-"gui.multiblockprojector.size": "Size: %s",
-"gui.multiblockprojector.size.small": "Small",
-"gui.multiblockprojector.size.medium": "Medium",
-"gui.multiblockprojector.size.large": "Large",
-"gui.multiblockprojector.button.size_increase": "+",
-"gui.multiblockprojector.button.size_decrease": "-"
-```
+Changes:
+- In `performAutoBuild()`, check if multiblock is `ICyclingBlockMultiblock`
+- For cycling positions:
+  - Get the StructureBlockInfo's position
+  - Call `getDefaultBlock(pos)` to get blank rune
+  - Use that instead of `info.getModifiedState()`
+- Non-cycling positions use normal block state
 
-### Task 10: Testing
-- Test Fission Reactor at all three sizes
-- Verify projection renders correctly in-world
-- Verify size persists when closing/reopening GUI
-- Verify +/- buttons enable/disable correctly at bounds
-- Test with Mekanism not installed (should fall back gracefully)
+### Task 7: Verify/Fix Altar Tier Structures
+**File**: `src/main/java/com/multiblockprojector/api/adapters/BloodMagicMultiblockAdapter.java`
+
+Review and verify altar structures match actual Blood Magic requirements:
+- Tier 1: Just altar block (1x1x1) - Already correct
+- Tier 2: Altar + 8 runes in 3x3 ring below (3x2x3)
+- Tier 3: Adds outer rune ring + 4 pillars (3 tall) + glowstone caps (7x4x7)
+- Tier 4: Adds another outer ring + taller pillars + bloodstone caps (11x6x11)
+- Tier 5: Adds outer ring + beacon pillars + hellforged caps (17x7x17)
+- Tier 6: Adds outer ring + tall pillars + crystal cluster caps (23x9x23)
+
+## Testing Checklist
+- [ ] Preview shows cycling runes in GUI (1 sec interval)
+- [ ] Tier 2 altar cycles through 11 basic runes
+- [ ] Tier 3+ altars cycle through 21 runes (basic + tier-2)
+- [ ] Ghost projection in world shows cycling runes
+- [ ] Placing any valid rune counts as correct during building
+- [ ] Creative auto-build places blank runes in rune positions
+- [ ] Non-rune positions (altar, pillars, caps) don't cycle and validate exactly
+- [ ] All 6 altar tier structures render correctly
+- [ ] Fallback blocks work when Blood Magic not installed
 
 ## Files Modified Summary
-1. **Create**: `api/IVariableSizeMultiblock.java`
-2. **Modify**: `api/adapters/MekanismFissionReactorAdapter.java` (uncomment + refactor)
-3. **Modify**: `api/UniversalMultiblockHandler.java` (uncomment Mekanism)
-4. **Modify**: `common/projector/Settings.java` (add size preset)
-5. **Modify**: `client/gui/ProjectorScreen.java` (add +/- buttons)
-6. **Modify**: `client/gui/SimpleMultiblockPreviewRenderer.java` (size parameter)
-7. **Modify**: `common/projector/MultiblockProjection.java` (use size)
-8. **Modify**: `resources/assets/.../lang/en_us.json` (translations)
-9. **Delete or keep disabled**: `api/adapters/MekanismMultiblockAdapter.java` (old approach)
+1. **NEW**: `api/ICyclingBlockMultiblock.java` - Interface for cycling block support
+2. **MODIFY**: `api/adapters/BloodMagicMultiblockAdapter.java` - Implement cycling, load all runes
+3. **MODIFY**: `client/gui/SimpleMultiblockPreviewRenderer.java` - Add cycling render logic
+4. **MODIFY**: `client/render/ProjectionRenderer.java` - Add cycling logic for world ghosts
+5. **MODIFY**: `client/BlockValidationManager.java` - Accept any valid rune in validation
+6. **MODIFY**: `common/network/MessageAutoBuild.java` - Use default blocks in creative
 
-## Out of Scope (Future Work)
-- Other Mekanism multiblocks (Dynamic Tank, Induction Matrix, etc.)
-- In-world size controls
-- Continuous size scaling
-- Internal components (fuel assemblies, control rods)
-- Create mod multiblocks
-
-## Risk Mitigation
-- Reflection may fail if Mekanism updates block registry names
-- Fall back to Iron Blocks ensures functionality even if reflection fails
-- Test with both Mekanism installed and not installed
+## Sources
+- [Blood Altar - Feed The Beast Wiki](https://ftbwiki.org/Blood_Altar)
+- [Blood Altar Structure Information](https://mods-of-minecraft.fandom.com/wiki/Blood_Altar)
