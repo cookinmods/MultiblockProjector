@@ -59,6 +59,7 @@ public class SchematicIndex {
     /** Returns the cached index, building it lazily on first access. */
     public static SchematicIndex get() {
         if (INSTANCE == null) {
+            SchematicExampleCopier.copyIfNeeded();
             INSTANCE = scan();
         }
         return INSTANCE;
@@ -66,6 +67,7 @@ public class SchematicIndex {
 
     /** Forces a full rescan of all schematic folders. */
     public static SchematicIndex rescan() {
+        SchematicExampleCopier.copyIfNeeded();
         INSTANCE = scan();
         return INSTANCE;
     }
@@ -112,8 +114,14 @@ public class SchematicIndex {
     private static SchematicIndex scan() {
         List<SchematicEntry> entries = new ArrayList<>();
 
-        // Always scan custom schematics folder
+        // Ensure custom schematics directory exists
         Path customRoot = FMLPaths.CONFIGDIR.get().resolve("multiblockprojector").resolve("schematics");
+        try {
+            Files.createDirectories(customRoot);
+        } catch (IOException e) {
+            UniversalProjector.LOGGER.warn("Failed to create schematics directory: {}", customRoot, e);
+        }
+
         if (Files.isDirectory(customRoot)) {
             scanCustomFolder(customRoot, entries);
         }
