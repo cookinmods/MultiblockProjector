@@ -1,4 +1,4 @@
-package com.multiblockprojector.api.adapters;
+package com.multiblockprojector.common.adapters;
 
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.api.BlockEntry;

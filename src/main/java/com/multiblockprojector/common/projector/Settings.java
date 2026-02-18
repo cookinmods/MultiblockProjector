@@ -1,8 +1,6 @@
 package com.multiblockprojector.common.projector;
 
-import com.multiblockprojector.api.IUniversalMultiblock;
 import com.multiblockprojector.api.MultiblockDefinition;
-import com.multiblockprojector.api.UniversalMultiblockHandler;
 import com.multiblockprojector.common.network.MessageProjectorSync;
 import com.multiblockprojector.common.registry.MultiblockIndex;
 import net.minecraft.core.BlockPos;
@@ -147,17 +145,6 @@ public class Settings {
     @Nullable
     public ResourceLocation getMultiblockId() {
         return this.multiblockId;
-    }
-
-    /**
-     * Legacy bridge: returns IUniversalMultiblock for callers not yet migrated to MultiblockDefinition.
-     * @deprecated Use {@link #getMultiblock()} which returns {@link MultiblockDefinition}.
-     */
-    @Deprecated
-    @Nullable
-    public IUniversalMultiblock getLegacyMultiblock() {
-        if (multiblockId == null) return null;
-        return UniversalMultiblockHandler.getByUniqueName(multiblockId);
     }
 
     public boolean isMirrored() { return this.mirror; }

@@ -2,9 +2,9 @@ package com.multiblockprojector.common.registry;
 
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.api.ProjectorAPI;
-import com.multiblockprojector.api.adapters.BloodMagicMultiblockAdapter;
-import com.multiblockprojector.api.adapters.IEMultiblockAdapter;
-import com.multiblockprojector.api.adapters.MekanismMultiblockAdapter;
+import com.multiblockprojector.common.adapters.BloodMagicMultiblockAdapter;
+import com.multiblockprojector.common.adapters.IEMultiblockAdapter;
+import com.multiblockprojector.common.adapters.MekanismMultiblockAdapter;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModList;
