@@ -21,7 +21,17 @@ repositories {
     }
 }
 
+// Use the NeoForge moddev artifacts produced by the root project
+var neoForgeArtifactsDir = rootProject.layout.buildDirectory.dir("moddev/artifacts")
+
 dependencies {
-    compileOnly "net.neoforged:neoforge:${neo_version}"
+    compileOnly files(neoForgeArtifactsDir.map { dir ->
+        dir.asFile.listFiles()?.findAll { it.name.endsWith('.jar') } ?: []
+    })
     compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
+}
+
+// Ensure the NeoForge artifacts are created before we compile
+tasks.named('compileJava') {
+    dependsOn rootProject.tasks.named('createMinecraftArtifacts')
 }
