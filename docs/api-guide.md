@@ -148,11 +148,11 @@ return new MultiblockStructure(blocks);  // size auto-computed from bounding box
 
 Use `LinkedHashMap` to preserve insertion order — blocks are rendered and animated in this order during the build-up preview.
 
-**Air blocks in API-registered multiblocks:** Omit air positions from the map. The projector only needs to know where solid blocks go. If you need enforced empty spaces (positions where a block must NOT exist), see the [Schematic & NBT Guide](schematic-nbt-guide.md) — `.nbt` files support air validation natively.
+**Air positions:** Omit positions you don't care about. For positions that **must** be empty, use `AirEntry` (see below).
 
 ### BlockEntry
 
-A sealed interface with two implementations:
+A sealed interface with three implementations:
 
 #### SingleBlock
 
@@ -182,6 +182,19 @@ Use `BlockGroup` when multiple block types are acceptable at a position, such as
 - Beacon bases (iron/gold/diamond/emerald)
 - Decorative blocks (any stone brick variant)
 - Tier-based components (any valid rune type)
+
+#### AirEntry
+
+Enforces that a position must be empty. If a player places any block here, the projector shows a red-tinted overlay and marks it as incorrect.
+
+```java
+new AirEntry()
+```
+
+Use `AirEntry` for positions that must remain clear, such as:
+- Interior spaces of hollow structures
+- Doorways and windows
+- Passages between multiblock sections
 
 ### MultiblockCategory
 
@@ -339,7 +352,7 @@ In the GUI preview, all four pedestal positions will cycle through diamond, emer
 ## Tips
 
 - **Insertion order matters.** Use `LinkedHashMap` for the block map. The build-up animation adds blocks in iteration order.
-- **Omit air for API multiblocks.** Don't add air blocks to the structure map — only include blocks the player needs to place. For enforced empty spaces, use `.nbt` files instead (see [Schematic & NBT Guide](schematic-nbt-guide.md)).
+- **Omit positions you don't care about.** Only include positions that matter. Use `AirEntry` for positions that must stay empty; omit positions that are irrelevant.
 - **Block type matching.** `SingleBlock.matches()` checks block type only, not block state properties. A furnace facing north will match a furnace facing east.
 - **Reuse BlockGroup instances.** If multiple positions accept the same set of blocks, create one `BlockGroup` and reuse it across positions.
 - **Guard your registration.** Always check `ModList.get().isLoaded("multiblockprojector")` before accessing API classes to avoid `NoClassDefFoundError` when the projector mod isn't installed.

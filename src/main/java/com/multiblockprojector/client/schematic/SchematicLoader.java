@@ -1,5 +1,6 @@
 package com.multiblockprojector.client.schematic;
 
+import com.multiblockprojector.api.AirEntry;
 import com.multiblockprojector.api.BlockEntry;
 import com.multiblockprojector.api.MultiblockStructure;
 import com.multiblockprojector.api.SingleBlock;
@@ -97,8 +98,8 @@ public class SchematicLoader {
             if (posTag.size() != 3) continue;
             BlockPos pos = new BlockPos(posTag.getInt(0), posTag.getInt(1), posTag.getInt(2));
 
-            // Include air blocks (for validation) and solid blocks
-            blocks.put(pos, new SingleBlock(state));
+            // Air blocks use AirEntry for enforced-empty validation; solid blocks use SingleBlock
+            blocks.put(pos, state.isAir() ? new AirEntry() : new SingleBlock(state));
 
             if (!state.isAir()) {
                 hasNonAirBlock = true;

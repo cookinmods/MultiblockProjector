@@ -142,7 +142,7 @@ Auto-build (creative/operator) places all missing solid blocks at once. It does 
 | Source | Mod code via `RegisterEvent` | `.nbt` files on disk |
 | Size variants | Supported (Small/Medium/Large) | Always single-size |
 | Block groups | Supported (cycling alternatives) | Not supported (one block per position) |
-| Air validation | Not available (air is omitted) | Supported (air positions are validated) |
+| Air validation | Supported via `AirEntry` (see [API Guide](api-guide.md)) | Supported (air positions are validated) |
 | Hot-reload | Requires game restart | Rescanned every time the GUI opens |
 | Persistence | Always available | Can be added/removed by the player |
 
