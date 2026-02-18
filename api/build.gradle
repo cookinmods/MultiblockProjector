@@ -19,6 +19,10 @@ repositories {
         name = 'NeoForged'
         url = 'https://maven.neoforged.net/releases'
     }
+    maven {
+        name = 'Mojang'
+        url = 'https://libraries.minecraft.net'
+    }
 }
 
 // Use the NeoForge moddev artifacts produced by the root project
@@ -29,6 +33,7 @@ dependencies {
         dir.asFile.listFiles()?.findAll { it.name.endsWith('.jar') } ?: []
     })
     compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
+    compileOnly 'com.mojang:brigadier:1.3.10'
 }
 
 // Ensure the NeoForge artifacts are created before we compile
