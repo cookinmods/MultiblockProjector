@@ -1,8 +1,6 @@
 package com.multiblockprojector.common.network;
 
-import com.multiblockprojector.api.ICyclingBlockMultiblock;
-import com.multiblockprojector.api.IUniversalMultiblock;
-import com.multiblockprojector.api.UniversalMultiblockHandler;
+import com.multiblockprojector.api.MultiblockDefinition;
 import com.multiblockprojector.common.items.ProjectorItem;
 import com.multiblockprojector.common.projector.MultiblockProjection;
 import com.multiblockprojector.common.projector.Settings;
@@ -29,68 +27,61 @@ import static com.multiblockprojector.UniversalProjector.rl;
  * Network packet for triggering auto-build on server side
  */
 public class MessageAutoBuild implements CustomPacketPayload {
-    
-    public static final CustomPacketPayload.Type<MessageAutoBuild> TYPE = 
+
+    public static final CustomPacketPayload.Type<MessageAutoBuild> TYPE =
         new CustomPacketPayload.Type<>(rl("auto_build"));
-    
-    public static final StreamCodec<FriendlyByteBuf, MessageAutoBuild> STREAM_CODEC = 
+
+    public static final StreamCodec<FriendlyByteBuf, MessageAutoBuild> STREAM_CODEC =
         StreamCodec.composite(
             BlockPos.STREAM_CODEC, p -> p.buildPos,
             net.minecraft.network.codec.ByteBufCodecs.idMapper(i -> InteractionHand.values()[i], Enum::ordinal), p -> p.hand,
             MessageAutoBuild::new
         );
-    
+
     private final BlockPos buildPos;
     private final InteractionHand hand;
-    
+
     public MessageAutoBuild(BlockPos buildPos, InteractionHand hand) {
         this.buildPos = buildPos;
         this.hand = hand;
     }
-    
+
     @Override
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;
     }
-    
+
     public static void sendToServer(BlockPos buildPos, InteractionHand hand) {
         PacketDistributor.sendToServer(new MessageAutoBuild(buildPos, hand));
     }
-    
+
     public static void handleServerSide(MessageAutoBuild packet, Player player) {
         // Only allow in creative mode
         if (!player.isCreative()) {
             return;
         }
-        
+
         ItemStack stack = player.getItemInHand(packet.hand);
         if (!(stack.getItem() instanceof ProjectorItem)) {
             return;
         }
-        
+
         Settings settings = ProjectorItem.getSettings(stack);
         if (settings.getMode() != Settings.Mode.PROJECTION || settings.getMultiblock() == null) {
             return;
         }
-        
+
         // Perform auto-build on server side
         performAutoBuild(player, settings, stack, packet.buildPos);
     }
-    
+
     private static void performAutoBuild(Player player, Settings settings, ItemStack held, BlockPos pos) {
         // Create the projection to get block positions and states
-        IUniversalMultiblock multiblock = settings.getLegacyMultiblock();
-        var size = MultiblockProjection.getSizeFromSettings(multiblock, settings);
-        MultiblockProjection projection = new MultiblockProjection(player.level(), multiblock, size);
+        MultiblockDefinition multiblock = settings.getMultiblock();
+        var variant = MultiblockProjection.getVariantFromSettings(multiblock, settings);
+        MultiblockProjection projection = new MultiblockProjection(player.level(), multiblock, variant);
         projection.setRotation(settings.getRotation());
         projection.setFlip(settings.isMirrored());
-
-        // Check if this multiblock supports cycling blocks
-        ICyclingBlockMultiblock cyclingMultiblock = null;
-        if (multiblock instanceof ICyclingBlockMultiblock cycling) {
-            cyclingMultiblock = cycling;
-        }
-        final ICyclingBlockMultiblock finalCyclingMultiblock = cyclingMultiblock;
 
         Level level = player.level();
         List<BlockPos> failedPlacements = new ArrayList<>();
@@ -99,35 +90,18 @@ public class MessageAutoBuild implements CustomPacketPayload {
         // Process all layers and place blocks
         projection.processAll((layer, info) -> {
             BlockPos worldPos = pos.offset(info.tPos);
-            BlockState targetState = info.getModifiedState(level, worldPos);
+            // Use tick=0 to get the first/default display state for placement
+            BlockState targetState = info.getDisplayState(level, worldPos, 0);
 
-            // For cycling positions (like Blood Magic runes), use the default block (blank rune)
-            BlockPos structurePos = info.tBlockInfo.pos();
-            if (finalCyclingMultiblock != null && finalCyclingMultiblock.hasCyclingBlocks(structurePos)) {
-                BlockState defaultBlock = finalCyclingMultiblock.getDefaultBlock(structurePos);
-                if (defaultBlock != null) {
-                    targetState = defaultBlock;
-                }
-            }
-            
             // Check if we can place the block here
             if (level.isInWorldBounds(worldPos) && level.getWorldBorder().isWithinBounds(worldPos)) {
                 try {
                     // Force place the block (server-side)
                     level.setBlock(worldPos, targetState, 3); // Flag 3 = update + notify clients
-                    
-                    // Apply NBT data if present (crucial for multiblock components)
-                    if (info.tBlockInfo.nbt() != null && !info.tBlockInfo.nbt().isEmpty()) {
-                        var blockEntity = level.getBlockEntity(worldPos);
-                        if (blockEntity != null) {
-                            blockEntity.loadWithComponents(info.tBlockInfo.nbt(), level.registryAccess());
-                            blockEntity.setChanged();
-                        }
-                    }
-                    
+
                     // Trigger block updates to ensure proper multiblock formation
                     level.updateNeighborsAt(worldPos, targetState.getBlock());
-                    
+
                     blocksPlaced[0]++;
                 } catch (Exception e) {
                     failedPlacements.add(worldPos);
@@ -135,15 +109,15 @@ public class MessageAutoBuild implements CustomPacketPayload {
             } else {
                 failedPlacements.add(worldPos);
             }
-            
+
             return false; // Continue processing all blocks
         });
-        
+
         if (!failedPlacements.isEmpty()) {
             // Some blocks couldn't be placed - show warning
             player.displayClientMessage(
                 Component.literal("Auto-build failed! " + failedPlacements.size() + " blocks couldn't be placed.")
-                    .withStyle(net.minecraft.ChatFormatting.RED), 
+                    .withStyle(net.minecraft.ChatFormatting.RED),
                 true
             );
         } else {
@@ -152,11 +126,11 @@ public class MessageAutoBuild implements CustomPacketPayload {
             settings.setPos(null);
             settings.setPlaced(false);
             settings.applyTo(held);
-            
+
             // Show success message
             player.displayClientMessage(
                 Component.literal("Auto-build completed! Placed " + blocksPlaced[0] + " blocks.")
-                    .withStyle(net.minecraft.ChatFormatting.GREEN), 
+                    .withStyle(net.minecraft.ChatFormatting.GREEN),
                 true
             );
         }

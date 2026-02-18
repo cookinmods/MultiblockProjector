@@ -1,7 +1,5 @@
 package com.multiblockprojector.client;
 
-import com.multiblockprojector.api.ICyclingBlockMultiblock;
-import com.multiblockprojector.api.IUniversalMultiblock;
 import com.multiblockprojector.common.projector.MultiblockProjection;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
@@ -9,7 +7,6 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -17,9 +14,9 @@ import java.util.Set;
  * Client-side manager for tracking incorrect blocks during building mode
  */
 public class BlockValidationManager {
-    
+
     private static final Map<BlockPos, Set<BlockPos>> INCORRECT_BLOCKS = new HashMap<>();
-    
+
     /**
      * Validate all blocks in a projection and mark incorrect ones
      */
@@ -27,35 +24,20 @@ public class BlockValidationManager {
         Set<BlockPos> oldIncorrectBlocks = INCORRECT_BLOCKS.getOrDefault(projectionCenter, new HashSet<>());
         Set<BlockPos> incorrectBlocks = new HashSet<>();
 
-        // Check if this multiblock supports cycling blocks
-        IUniversalMultiblock multiblock = projection.getMultiblock();
-        ICyclingBlockMultiblock cyclingMultiblock = null;
-        if (multiblock instanceof ICyclingBlockMultiblock cycling) {
-            cyclingMultiblock = cycling;
-        }
-        final ICyclingBlockMultiblock finalCyclingMultiblock = cyclingMultiblock;
-
         // Process each layer of the projection
         for (int layer = 0; layer < projection.getLayerCount(); layer++) {
             projection.process(layer, info -> {
                 BlockPos worldPos = projectionCenter.offset(info.tPos);
-                BlockState expectedState = info.getModifiedState(level, worldPos);
                 BlockState actualState = level.getBlockState(worldPos);
 
-                // Don't validate air blocks
-                if (expectedState.isAir()) {
+                // Don't validate air block entries
+                BlockState displayState = info.getDisplayState(level, worldPos, 0);
+                if (displayState.isAir()) {
                     return false;
                 }
 
-                // Check if the actual block matches - with cycling block support
-                BlockPos structurePos = info.tBlockInfo.pos();
-                boolean matches;
-                if (finalCyclingMultiblock != null && finalCyclingMultiblock.hasCyclingBlocks(structurePos)) {
-                    // For cycling blocks, check if ANY acceptable block matches
-                    matches = blocksMatchCycling(actualState, finalCyclingMultiblock.getAcceptableBlocks(structurePos));
-                } else {
-                    matches = blocksMatch(actualState, expectedState);
-                }
+                // Check if the actual block matches the requirement
+                boolean matches = info.matches(actualState);
 
                 if (!matches) {
                     // Block is incorrect if it's not air and doesn't match
@@ -67,22 +49,22 @@ public class BlockValidationManager {
                 return false; // Continue processing
             });
         }
-        
+
         // Check if new incorrect blocks were added (blocks that weren't incorrect before)
         Set<BlockPos> newIncorrectBlocks = new HashSet<>(incorrectBlocks);
         newIncorrectBlocks.removeAll(oldIncorrectBlocks);
         boolean hasNewIncorrectBlocks = !newIncorrectBlocks.isEmpty();
-        
+
         // Update the incorrect blocks map
         if (incorrectBlocks.isEmpty()) {
             INCORRECT_BLOCKS.remove(projectionCenter);
         } else {
             INCORRECT_BLOCKS.put(projectionCenter.immutable(), incorrectBlocks);
         }
-        
+
         return hasNewIncorrectBlocks;
     }
-    
+
     /**
      * Check if a specific block position is marked as incorrect
      */
@@ -94,28 +76,28 @@ public class BlockValidationManager {
         }
         return false;
     }
-    
+
     /**
      * Get all incorrect blocks for a specific projection
      */
     public static Set<BlockPos> getIncorrectBlocks(BlockPos projectionCenter) {
         return INCORRECT_BLOCKS.getOrDefault(projectionCenter, new HashSet<>());
     }
-    
+
     /**
      * Clear validation data for a specific projection
      */
     public static void clearValidation(BlockPos projectionCenter) {
         INCORRECT_BLOCKS.remove(projectionCenter);
     }
-    
+
     /**
      * Clear all validation data
      */
     public static void clearAll() {
         INCORRECT_BLOCKS.clear();
     }
-    
+
     /**
      * Check if a projection is complete (no incorrect blocks and all blocks placed)
      */
@@ -126,36 +108,22 @@ public class BlockValidationManager {
             return false;
         }
 
-        // Check if this multiblock supports cycling blocks
-        IUniversalMultiblock multiblock = projection.getMultiblock();
-        ICyclingBlockMultiblock cyclingMultiblock = null;
-        if (multiblock instanceof ICyclingBlockMultiblock cycling) {
-            cyclingMultiblock = cycling;
-        }
-        final ICyclingBlockMultiblock finalCyclingMultiblock = cyclingMultiblock;
-
         // Check if all required blocks are placed
         for (int layer = 0; layer < projection.getLayerCount(); layer++) {
             boolean[] hasIncompleteBlocks = {false};
 
             projection.process(layer, info -> {
                 BlockPos worldPos = projectionCenter.offset(info.tPos);
-                BlockState expectedState = info.getModifiedState(level, worldPos);
                 BlockState actualState = level.getBlockState(worldPos);
 
-                // Skip air blocks
-                if (expectedState.isAir()) {
+                // Skip air block entries
+                BlockState displayState = info.getDisplayState(level, worldPos, 0);
+                if (displayState.isAir()) {
                     return false;
                 }
 
-                // Check if block is missing or incorrect - with cycling block support
-                BlockPos structurePos = info.tBlockInfo.pos();
-                boolean matches;
-                if (finalCyclingMultiblock != null && finalCyclingMultiblock.hasCyclingBlocks(structurePos)) {
-                    matches = blocksMatchCycling(actualState, finalCyclingMultiblock.getAcceptableBlocks(structurePos));
-                } else {
-                    matches = blocksMatch(actualState, expectedState);
-                }
+                // Check if block is missing or incorrect
+                boolean matches = info.matches(actualState);
 
                 if (actualState.isAir() || !matches) {
                     hasIncompleteBlocks[0] = true;
@@ -171,51 +139,5 @@ public class BlockValidationManager {
         }
 
         return true; // All blocks are correctly placed
-    }
-    
-    /**
-     * Custom block matching that ignores direction for certain blocks
-     */
-    private static boolean blocksMatch(BlockState actualState, BlockState expectedState) {
-        // If blocks are different types, they don't match
-        if (!actualState.is(expectedState.getBlock())) {
-            return false;
-        }
-        
-        // Get the block registry name for more accurate matching
-        String registryName = actualState.getBlock().builtInRegistryHolder().key().location().toString();
-        
-        // Special case: Any piston blocks - ignore facing direction for squeezer compatibility
-        if (registryName.contains("piston")) {
-            return true; // Any piston direction is acceptable
-        }
-        
-        // Special case: IE Conveyor Belts - ignore facing direction
-        if (registryName.contains("immersiveengineering") && registryName.contains("conveyor")) {
-            return true; // Any conveyor direction is acceptable
-        }
-        
-        // Default: states must match exactly
-        return actualState.equals(expectedState);
-    }
-
-    /**
-     * Check if an actual block matches ANY of the acceptable block states.
-     * Used for cycling block positions (e.g., Blood Magic rune positions).
-     */
-    private static boolean blocksMatchCycling(BlockState actualState, List<BlockState> acceptableBlocks) {
-        if (acceptableBlocks == null || acceptableBlocks.isEmpty()) {
-            return false;
-        }
-
-        for (BlockState acceptable : acceptableBlocks) {
-            // Use the same block type check (not exact state match)
-            // This allows any rune variant to be placed
-            if (actualState.is(acceptable.getBlock())) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }
