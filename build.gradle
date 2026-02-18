@@ -35,8 +35,18 @@ java {
     withSourcesJar()
 }
 
-sourceSets.main.resources { 
-    srcDir 'src/generated/resources' 
+sourceSets.main.resources {
+    srcDir 'src/generated/resources'
+}
+
+// Testmod source set: loaded in dev runs only, not included in release jar
+sourceSets {
+    testmod {
+        java {
+            compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+            runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+        }
+    }
 }
 
 final runsFolder = layout.projectDirectory.dir('runs')
@@ -49,6 +59,7 @@ neoForge {
     mods {
         multiblockprojector {
             sourceSet sourceSets.main
+            sourceSet sourceSets.testmod
         }
     }
 
