@@ -115,6 +115,7 @@ public class MultiblockIndex {
     }
 
     private static String getModDisplayName(String modId) {
+        if ("minecraft".equals(modId)) return "Vanilla";
         return ModList.get().getModContainerById(modId)
             .map(c -> c.getModInfo().getDisplayName())
             .orElse(modId);
