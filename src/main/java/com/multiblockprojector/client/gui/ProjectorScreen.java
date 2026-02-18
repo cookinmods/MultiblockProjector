@@ -7,8 +7,11 @@ import com.multiblockprojector.common.network.MessageProjectorSync;
 import com.multiblockprojector.common.projector.Settings;
 import com.multiblockprojector.common.registry.MultiblockIndex;
 import com.multiblockprojector.common.registry.MultiblockIndex.TabEntry;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractSelectionList;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
@@ -16,42 +19,39 @@ import net.minecraft.world.item.ItemStack;
 
 import javax.annotation.Nonnull;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
- * GUI screen for selecting multiblock structures with mod dropdown
+ * GUI screen for selecting multiblock structures with a mod selector
+ * sub-screen and scrollable list using AbstractSelectionList.
  */
 public class ProjectorScreen extends Screen {
     private final ItemStack projectorStack;
     private final InteractionHand hand;
     private final Settings settings;
 
-    // Filtered multiblocks for current tab
     private List<MultiblockDefinition> filteredMultiblocks;
-
     private String selectedTab;
+
     // Layout constants
     private static final int MARGIN = 10;
-    private static final int DROPDOWN_Y = 10;
-    private static final int DROPDOWN_BUTTON_HEIGHT = 20;
-    private static final int DROPDOWN_ENTRY_HEIGHT = 18;
-    private static final int MAX_DROPDOWN_VISIBLE = 8;
+    private static final int TAB_SELECTOR_Y = 10;
+    private static final int TAB_SELECTOR_HEIGHT = 20;
     private static final int ENTRY_HEIGHT = 20;
 
-    // Dropdown state
-    private boolean dropdownOpen = false;
-    private int dropdownScrollOffset = 0;
-
-    // Multiblock list layout (computed in init())
+    // Layout (computed in init())
     private int leftPanelWidth;
     private int listStartY;
-    private int scrollOffset = 0;
-    private int visibleEntries = 7;
+
+    // Widgets
+    private MultiblockListWidget multiblockList;
+    private Button modSelectorButton;
+    private Button sizeDecreaseButton;
+    private Button sizeIncreaseButton;
 
     private SimpleMultiblockPreviewRenderer previewRenderer;
     private MultiblockDefinition selectedMultiblock;
     private int currentSizePresetIndex = 0;
-    private Button sizeDecreaseButton;
-    private Button sizeIncreaseButton;
     private boolean isDragging = false;
 
     public ProjectorScreen(ItemStack projectorStack, InteractionHand hand) {
@@ -63,26 +63,25 @@ public class ProjectorScreen extends Screen {
 
         var index = MultiblockIndex.get();
         var tabs = index.getTabs();
-        // Default to first mod tab (skip "All"), fall back to "All"
         this.selectedTab = tabs.size() > 1 ? tabs.get(1).modId() : MultiblockIndex.ALL_TAB;
         updateFilteredMultiblocks();
     }
 
     private void updateFilteredMultiblocks() {
         filteredMultiblocks = MultiblockIndex.get().getForTab(selectedTab);
-        scrollOffset = 0;
     }
 
     private void selectTab(String tabId) {
         selectedTab = tabId;
-        dropdownOpen = false;
-        dropdownScrollOffset = 0;
         updateFilteredMultiblocks();
         selectedMultiblock = null;
-        if (sizeDecreaseButton != null) sizeDecreaseButton.visible = false;
-        if (sizeIncreaseButton != null) sizeIncreaseButton.visible = false;
         previewRenderer.setMultiblock(null);
         rebuildWidgets();
+    }
+
+    @Override
+    public void renderBackground(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Empty — prevents default blur/dirt background
     }
 
     @Override
@@ -91,54 +90,28 @@ public class ProjectorScreen extends Screen {
 
         leftPanelWidth = this.width / 2;
 
-        // --- Dropdown button at top ---
-        String selectedName = getSelectedTabDisplayName();
-        this.addRenderableWidget(Button.builder(
-            Component.literal(selectedName + " \u25BC"), // ▼
-            btn -> toggleDropdown()
-        ).bounds(MARGIN, DROPDOWN_Y, leftPanelWidth - MARGIN * 2, DROPDOWN_BUTTON_HEIGHT).build());
+        // --- Mod selector button (opens sub-screen) ---
+        modSelectorButton = Button.builder(
+            Component.literal(getSelectedTabDisplayName() + " \u25BC"),
+            btn -> openModSelector()
+        ).bounds(MARGIN, TAB_SELECTOR_Y, leftPanelWidth - MARGIN * 2, TAB_SELECTOR_HEIGHT).build();
+        this.addRenderableWidget(modSelectorButton);
 
         // --- Calculate dynamic list area ---
-        listStartY = DROPDOWN_Y + DROPDOWN_BUTTON_HEIGHT + 8;
+        listStartY = TAB_SELECTOR_Y + TAB_SELECTOR_HEIGHT + 4;
         int selectButtonY = this.height - 30;
-        visibleEntries = Math.max(1, (selectButtonY - listStartY - 10) / ENTRY_HEIGHT);
+        int listHeight = selectButtonY - listStartY - 6;
 
-        // Clamp scroll offset when screen resizes
-        if (filteredMultiblocks.size() > visibleEntries) {
-            scrollOffset = Math.max(0, Math.min(scrollOffset, filteredMultiblocks.size() - visibleEntries));
-        } else {
-            scrollOffset = 0;
-        }
-
-        // --- Multiblock list buttons ---
-        boolean needsScrollbar = filteredMultiblocks.size() > visibleEntries;
-        int buttonWidth = needsScrollbar
-            ? leftPanelWidth - MARGIN * 2 - 12  // leave space for scrollbar
-            : leftPanelWidth - MARGIN * 2;
-
-        for (int i = 0; i < Math.min(visibleEntries, filteredMultiblocks.size() - scrollOffset); i++) {
-            int index = scrollOffset + i;
-            if (index >= filteredMultiblocks.size()) break;
-
-            MultiblockDefinition multiblock = filteredMultiblocks.get(index);
-
-            Button button = Button.builder(
-                multiblock.displayName(),
-                btn -> selectMultiblockForPreview(multiblock)
-            ).bounds(MARGIN, listStartY + i * ENTRY_HEIGHT, buttonWidth, 18).build();
-
-            this.addRenderableWidget(button);
-        }
+        // --- Multiblock list (AbstractSelectionList) ---
+        multiblockList = new MultiblockListWidget(this.minecraft, leftPanelWidth, listHeight, listStartY, ENTRY_HEIGHT);
+        refreshListEntries();
+        this.addRenderableWidget(multiblockList);
 
         // --- Select button pinned to bottom ---
-        int selectButtonWidth = needsScrollbar
-            ? leftPanelWidth - MARGIN * 2 - 12
-            : leftPanelWidth - MARGIN * 2;
-
         this.addRenderableWidget(Button.builder(
             Component.translatable("gui.multiblockprojector.select"),
             btn -> selectMultiblock(selectedMultiblock)
-        ).bounds(MARGIN, selectButtonY, selectButtonWidth, 20).build());
+        ).bounds(MARGIN, selectButtonY, leftPanelWidth - MARGIN * 2, 20).build());
 
         // --- Size control buttons in right panel ---
         int rightPanelCenterX = leftPanelWidth + (this.width - leftPanelWidth) / 2;
@@ -166,6 +139,14 @@ public class ProjectorScreen extends Screen {
         }
     }
 
+    private void openModSelector() {
+        this.minecraft.setScreen(new ModSelectorScreen(this, selectedTab, this::selectTab));
+    }
+
+    private void refreshListEntries() {
+        multiblockList.refreshEntries(filteredMultiblocks, selectedMultiblock);
+    }
+
     private String getSelectedTabDisplayName() {
         var tabs = MultiblockIndex.get().getTabs();
         for (TabEntry tab : tabs) {
@@ -174,10 +155,6 @@ public class ProjectorScreen extends Screen {
             }
         }
         return "All";
-    }
-
-    private void toggleDropdown() {
-        dropdownOpen = !dropdownOpen;
     }
 
     private void decreaseSizePreset() {
@@ -214,20 +191,19 @@ public class ProjectorScreen extends Screen {
     private void selectMultiblockForPreview(MultiblockDefinition multiblock) {
         this.selectedMultiblock = multiblock;
 
-        // Show/hide size buttons based on multiblock type
         if (multiblock.isVariableSize()) {
-            var variants = multiblock.variants();
-            this.currentSizePresetIndex = variants.size() / 2;
-
-            sizeDecreaseButton.visible = true;
-            sizeIncreaseButton.visible = true;
-            updateSizeButtons(multiblock);
+            this.currentSizePresetIndex = multiblock.variants().size() / 2;
             updatePreviewWithSize(multiblock);
         } else {
             this.currentSizePresetIndex = 0;
-            sizeDecreaseButton.visible = false;
-            sizeIncreaseButton.visible = false;
             this.previewRenderer.setMultiblock(multiblock);
+        }
+
+        boolean showSizeButtons = multiblock.isVariableSize();
+        if (sizeDecreaseButton != null) sizeDecreaseButton.visible = showSizeButtons;
+        if (sizeIncreaseButton != null) sizeIncreaseButton.visible = showSizeButtons;
+        if (showSizeButtons) {
+            updateSizeButtons(multiblock);
         }
     }
 
@@ -239,13 +215,10 @@ public class ProjectorScreen extends Screen {
         settings.setSizePresetIndex(currentSizePresetIndex);
         settings.applyTo(projectorStack);
 
-        // Send packet to server
         MessageProjectorSync.sendToServer(settings, hand);
 
-        // Close GUI
         this.minecraft.setScreen(null);
 
-        // Show confirmation message
         if (minecraft.player != null) {
             Component sizeInfo = Component.empty();
             if (multiblock.isVariableSize()) {
@@ -261,15 +234,11 @@ public class ProjectorScreen extends Screen {
 
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
-
-        // Draw left panel background
+        // Draw panel backgrounds
         guiGraphics.fill(0, 0, leftPanelWidth, this.height, 0x80000000);
-
-        // Draw right panel background (grey)
         guiGraphics.fill(leftPanelWidth, 0, this.width, this.height, 0x80404040);
 
-        // Render all widgets (buttons)
+        // Render all widgets (mod selector button, multiblock list, select button)
         super.render(guiGraphics, mouseX, mouseY, partialTick);
 
         // Draw vertical separator
@@ -312,75 +281,6 @@ public class ProjectorScreen extends Screen {
                 guiGraphics.drawCenteredString(this.font, variant.getFullDisplayName(), rightPanelCenterX, sizeTextY, 0xFFFFFF);
             }
         }
-
-        // Draw scrollbar if needed
-        if (filteredMultiblocks.size() > visibleEntries) {
-            renderScrollbar(guiGraphics);
-        }
-
-        // Draw multiblock info on hover in left panel
-        if (!dropdownOpen && mouseX >= MARGIN && mouseX <= leftPanelWidth - MARGIN && mouseY >= listStartY) {
-            int hoveredIndex = (mouseY - listStartY) / ENTRY_HEIGHT;
-            if (hoveredIndex >= 0 && hoveredIndex < visibleEntries) {
-                int multiblockIndex = scrollOffset + hoveredIndex;
-                if (multiblockIndex < filteredMultiblocks.size()) {
-                    MultiblockDefinition multiblock = filteredMultiblocks.get(multiblockIndex);
-                    guiGraphics.renderTooltip(this.font,
-                        Component.translatable("gui.multiblockprojector.tooltip", multiblock.modId()),
-                        mouseX, mouseY);
-                }
-            }
-        }
-
-        // --- Render dropdown overlay LAST (on top of everything in left panel) ---
-        if (dropdownOpen) {
-            renderDropdownOverlay(guiGraphics, mouseX, mouseY);
-        }
-    }
-
-    private void renderDropdownOverlay(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        var tabs = MultiblockIndex.get().getTabs();
-        int overlayX = MARGIN;
-        int overlayY = DROPDOWN_Y + DROPDOWN_BUTTON_HEIGHT;
-        int overlayWidth = leftPanelWidth - MARGIN * 2;
-        int visibleDropdownEntries = Math.min(MAX_DROPDOWN_VISIBLE, tabs.size());
-        int overlayHeight = visibleDropdownEntries * DROPDOWN_ENTRY_HEIGHT + 4;
-
-        // Background with border
-        guiGraphics.fill(overlayX - 1, overlayY - 1, overlayX + overlayWidth + 1, overlayY + overlayHeight + 1, 0xFF555555);
-        guiGraphics.fill(overlayX, overlayY, overlayX + overlayWidth, overlayY + overlayHeight, 0xFF1a1a1a);
-
-        // Render visible entries
-        for (int i = 0; i < visibleDropdownEntries; i++) {
-            int tabIdx = dropdownScrollOffset + i;
-            if (tabIdx >= tabs.size()) break;
-
-            TabEntry tab = tabs.get(tabIdx);
-            int entryY = overlayY + 2 + i * DROPDOWN_ENTRY_HEIGHT;
-
-            boolean hovered = mouseX >= overlayX && mouseX <= overlayX + overlayWidth
-                && mouseY >= entryY && mouseY < entryY + DROPDOWN_ENTRY_HEIGHT;
-            boolean isSelected = tab.modId().equals(selectedTab);
-
-            if (hovered) {
-                guiGraphics.fill(overlayX, entryY, overlayX + overlayWidth, entryY + DROPDOWN_ENTRY_HEIGHT, 0xFF3a3a5a);
-            } else if (isSelected) {
-                guiGraphics.fill(overlayX, entryY, overlayX + overlayWidth, entryY + DROPDOWN_ENTRY_HEIGHT, 0xFF2a2a3a);
-            }
-
-            int textColor = isSelected ? 0xFFFFFF : 0xCCCCCC;
-            guiGraphics.drawString(this.font, tab.displayName(), overlayX + 6, entryY + 5, textColor);
-        }
-
-        // Scroll indicators
-        if (dropdownScrollOffset > 0) {
-            guiGraphics.drawCenteredString(this.font, "\u25B2",
-                overlayX + overlayWidth / 2, overlayY - 8, 0xAAAAAA);
-        }
-        if (dropdownScrollOffset + visibleDropdownEntries < tabs.size()) {
-            guiGraphics.drawCenteredString(this.font, "\u25BC",
-                overlayX + overlayWidth / 2, overlayY + overlayHeight, 0xAAAAAA);
-        }
     }
 
     @Override
@@ -390,55 +290,34 @@ public class ProjectorScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // Close dropdown first if open
-        if (keyCode == 256 && dropdownOpen) {
-            dropdownOpen = false;
-            return true;
-        }
-
-        if (keyCode == 256) { // ESC key
-            // Check if projector is in an operating state
+        if (keyCode == 256) {
             Settings.Mode currentMode = settings.getMode();
             boolean hasProjection = settings.getMultiblock() != null && settings.getPos() != null;
             boolean isPlaced = settings.isPlaced();
 
-            // If not in projection mode with a ghost projection, or build mode with projection,
-            // return to nothing selected state
             if (currentMode != Settings.Mode.PROJECTION && currentMode != Settings.Mode.BUILDING) {
-                // Not in operating state - reset to nothing selected
                 settings.setMode(Settings.Mode.NOTHING_SELECTED);
                 settings.setMultiblock(null);
                 settings.setPos(null);
                 settings.setPlaced(false);
                 settings.applyTo(projectorStack);
-
-                // Send packet to server
                 MessageProjectorSync.sendToServer(settings, hand);
             } else if (currentMode == Settings.Mode.PROJECTION && !hasProjection) {
-                // In projection mode but no ghost projection - reset to nothing selected
                 settings.setMode(Settings.Mode.NOTHING_SELECTED);
                 settings.setMultiblock(null);
                 settings.setPos(null);
                 settings.setPlaced(false);
                 settings.applyTo(projectorStack);
-
-                // Send packet to server
                 MessageProjectorSync.sendToServer(settings, hand);
             } else if (currentMode == Settings.Mode.BUILDING && (!hasProjection || !isPlaced)) {
-                // In building mode but no proper projection - reset to nothing selected
                 settings.setMode(Settings.Mode.NOTHING_SELECTED);
                 settings.setMultiblock(null);
                 settings.setPos(null);
                 settings.setPlaced(false);
                 settings.applyTo(projectorStack);
-
-                // Send packet to server
                 MessageProjectorSync.sendToServer(settings, hand);
             }
-            // If in proper operating state (projection with ghost or building with placed projection),
-            // just close GUI without changing state
 
-            // Close GUI
             this.minecraft.setScreen(null);
             return true;
         }
@@ -447,47 +326,11 @@ public class ProjectorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        // Handle dropdown scrolling when open
-        if (dropdownOpen) {
-            var tabs = MultiblockIndex.get().getTabs();
-            int overlayX = MARGIN;
-            int overlayY = DROPDOWN_Y + DROPDOWN_BUTTON_HEIGHT;
-            int overlayWidth = leftPanelWidth - MARGIN * 2;
-            int visibleDropdownEntries = Math.min(MAX_DROPDOWN_VISIBLE, tabs.size());
-            int overlayHeight = visibleDropdownEntries * DROPDOWN_ENTRY_HEIGHT + 4;
-
-            if (mouseX >= overlayX && mouseX <= overlayX + overlayWidth
-                && mouseY >= overlayY && mouseY <= overlayY + overlayHeight) {
-                if (scrollY > 0) {
-                    dropdownScrollOffset = Math.max(0, dropdownScrollOffset - 1);
-                } else if (scrollY < 0) {
-                    dropdownScrollOffset = Math.min(tabs.size() - visibleDropdownEntries, dropdownScrollOffset + 1);
-                }
-                return true;
-            }
-        }
-
-        // Handle scrolling in left panel multiblock list
-        if (mouseX < leftPanelWidth && mouseY >= listStartY && filteredMultiblocks.size() > visibleEntries) {
-            int oldScrollOffset = scrollOffset;
-            if (scrollY > 0) {
-                scrollOffset = Math.max(0, scrollOffset - 1);
-            } else if (scrollY < 0) {
-                scrollOffset = Math.min(filteredMultiblocks.size() - visibleEntries, scrollOffset + 1);
-            }
-
-            if (scrollOffset != oldScrollOffset) {
-                rebuildWidgets();
-                return true;
-            }
-        }
-
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        // Handle dragging in preview area for rotation
         if (mouseX > leftPanelWidth && isDragging) {
             previewRenderer.onMouseDragged(mouseX, mouseY, deltaX, deltaY);
             return true;
@@ -498,44 +341,8 @@ public class ProjectorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Handle dropdown clicks when open
-        if (dropdownOpen && button == 0) {
-            var tabs = MultiblockIndex.get().getTabs();
-            int overlayX = MARGIN;
-            int overlayY = DROPDOWN_Y + DROPDOWN_BUTTON_HEIGHT;
-            int overlayWidth = leftPanelWidth - MARGIN * 2;
-            int visibleDropdownEntries = Math.min(MAX_DROPDOWN_VISIBLE, tabs.size());
-            int overlayHeight = visibleDropdownEntries * DROPDOWN_ENTRY_HEIGHT + 4;
-
-            if (mouseX >= overlayX && mouseX <= overlayX + overlayWidth
-                && mouseY >= overlayY && mouseY <= overlayY + overlayHeight) {
-                int entryIndex = (int)((mouseY - overlayY - 2) / DROPDOWN_ENTRY_HEIGHT);
-                int tabIdx = dropdownScrollOffset + entryIndex;
-                if (tabIdx >= 0 && tabIdx < tabs.size()) {
-                    selectTab(tabs.get(tabIdx).modId());
-                }
-                return true;
-            }
-
-            // Click outside dropdown — close it
-            dropdownOpen = false;
-        }
-
-        // Let buttons handle clicks first
+        // Let widgets (mod selector button, list, select button) handle clicks
         if (super.mouseClicked(mouseX, mouseY, button)) {
-            return true;
-        }
-
-        // Handle scrollbar clicks
-        if (button == 0 && filteredMultiblocks.size() > visibleEntries
-            && isClickOnScrollbar(mouseX, mouseY)) {
-            int scrollbarHeight = visibleEntries * ENTRY_HEIGHT;
-
-            double clickPercentage = (mouseY - listStartY) / scrollbarHeight;
-            int newScrollOffset = (int) (clickPercentage * (filteredMultiblocks.size() - visibleEntries));
-
-            scrollOffset = Math.max(0, Math.min(filteredMultiblocks.size() - visibleEntries, newScrollOffset));
-            rebuildWidgets();
             return true;
         }
 
@@ -556,28 +363,293 @@ public class ProjectorScreen extends Screen {
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
-    private void renderScrollbar(GuiGraphics guiGraphics) {
-        int scrollbarX = leftPanelWidth - 8;
-        int scrollbarWidth = 6;
-        int scrollbarHeight = visibleEntries * ENTRY_HEIGHT;
+    // ---- Inner widget: Scrollable multiblock list ----
 
-        guiGraphics.fill(scrollbarX, listStartY, scrollbarX + scrollbarWidth, listStartY + scrollbarHeight, 0xFF404040);
+    private class MultiblockListWidget extends AbstractSelectionList<MultiblockListWidget.Entry> {
 
-        int totalItems = filteredMultiblocks.size();
-        float scrollPercentage = (float) scrollOffset / (totalItems - visibleEntries);
+        public MultiblockListWidget(Minecraft mc, int width, int height, int y, int itemHeight) {
+            super(mc, width, height, y, itemHeight);
+        }
 
-        int thumbHeight = Math.max(10, (scrollbarHeight * visibleEntries) / totalItems);
-        int thumbY = listStartY + (int)((scrollbarHeight - thumbHeight) * scrollPercentage);
+        public void refreshEntries(List<MultiblockDefinition> multiblocks, MultiblockDefinition selected) {
+            this.clearEntries();
+            Entry selectedEntry = null;
+            for (MultiblockDefinition mb : multiblocks) {
+                Entry entry = new Entry(mb);
+                this.addEntry(entry);
+                if (mb == selected) {
+                    selectedEntry = entry;
+                }
+            }
+            if (selectedEntry != null) {
+                this.setSelected(selectedEntry);
+            }
+        }
 
-        guiGraphics.fill(scrollbarX + 1, thumbY, scrollbarX + scrollbarWidth - 1, thumbY + thumbHeight, 0xFF808080);
+        @Override
+        public int getRowWidth() {
+            return this.width - 16;
+        }
+
+        @Override
+        protected int getScrollbarPosition() {
+            return this.getX() + this.width - MARGIN;
+        }
+
+        @Override
+        public int getRowLeft() {
+            return this.getX() + MARGIN;
+        }
+
+        @Override
+        protected void renderListBackground(@Nonnull GuiGraphics graphics) {
+            // Empty — parent screen draws panel background
+        }
+
+        @Override
+        protected void renderListSeparators(@Nonnull GuiGraphics graphics) {
+            // Empty — no separator lines
+        }
+
+        @Override
+        protected void enableScissor(@Nonnull GuiGraphics graphics) {
+            graphics.enableScissor(this.getX(), this.getY(), this.getX() + this.width, this.getY() + this.height);
+        }
+
+        @Override
+        protected void updateWidgetNarration(@Nonnull NarrationElementOutput output) {
+            // Default narration
+        }
+
+        private class Entry extends AbstractSelectionList.Entry<Entry> {
+            final MultiblockDefinition multiblock;
+
+            Entry(MultiblockDefinition multiblock) {
+                this.multiblock = multiblock;
+            }
+
+            @Override
+            public void render(@Nonnull GuiGraphics graphics, int index, int top, int left,
+                              int width, int height, int mouseX, int mouseY,
+                              boolean hovering, float partialTick) {
+                int color = hovering ? 0xFFFFFF : 0xCCCCCC;
+                graphics.drawString(font, multiblock.displayName(),
+                    left + 4, top + (height - font.lineHeight) / 2, color);
+            }
+
+            @Override
+            public boolean mouseClicked(double mouseX, double mouseY, int button) {
+                if (button == 0) {
+                    MultiblockListWidget.this.setSelected(this);
+                    selectMultiblockForPreview(multiblock);
+                    return true;
+                }
+                return false;
+            }
+        }
     }
 
-    private boolean isClickOnScrollbar(double mouseX, double mouseY) {
-        int scrollbarX = leftPanelWidth - 8;
-        int scrollbarWidth = 6;
-        int scrollbarHeight = visibleEntries * ENTRY_HEIGHT;
+    // ---- Inner screen: Mod selector sub-screen ----
 
-        return mouseX >= scrollbarX && mouseX <= scrollbarX + scrollbarWidth &&
-               mouseY >= listStartY && mouseY <= listStartY + scrollbarHeight;
+    private static class ModSelectorScreen extends Screen {
+        private final Screen parent;
+        private final String currentTabId;
+        private final Consumer<String> onSelect;
+
+        private static final int PANEL_PADDING = 8;
+        private static final int TITLE_HEIGHT = 18;
+
+        private ModTabListWidget tabList;
+        private int panelX, panelY, panelW, panelH;
+
+        protected ModSelectorScreen(Screen parent, String currentTabId, Consumer<String> onSelect) {
+            super(Component.literal("Select Mod"));
+            this.parent = parent;
+            this.currentTabId = currentTabId;
+            this.onSelect = onSelect;
+        }
+
+        @Override
+        public void renderBackground(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            // Empty — prevents default blur. We draw our own dimmed background in render().
+        }
+
+        @Override
+        protected void init() {
+            super.init();
+
+            // Size the list to fit content, capped to screen
+            var tabs = MultiblockIndex.get().getTabs();
+            int listWidth = Math.min(220, this.width - 60);
+            int listItemHeight = 20;
+            int contentHeight = tabs.size() * listItemHeight;
+            int maxListHeight = this.height - 80;
+            int listHeight = Math.min(contentHeight + 4, maxListHeight);
+
+            // Compute panel bounds (panel wraps list + title)
+            panelW = listWidth + PANEL_PADDING * 2;
+            panelH = TITLE_HEIGHT + listHeight + PANEL_PADDING * 2;
+            panelX = (this.width - panelW) / 2;
+            panelY = (this.height - panelH) / 2;
+
+            // Position list inside panel, below title
+            int listX = panelX + PANEL_PADDING;
+            int listY = panelY + PANEL_PADDING + TITLE_HEIGHT;
+
+            tabList = new ModTabListWidget(this.minecraft, listWidth, listHeight, listY, listItemHeight);
+            tabList.setX(listX);
+
+            for (TabEntry tab : tabs) {
+                tabList.addTabEntry(tab, tab.modId().equals(currentTabId));
+            }
+
+            this.addRenderableWidget(tabList);
+        }
+
+        @Override
+        public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+            // Dim the background
+            guiGraphics.fill(0, 0, this.width, this.height, 0xC0000000);
+
+            // Panel border + background
+            guiGraphics.fill(panelX - 1, panelY - 1, panelX + panelW + 1, panelY + panelH + 1, 0xFF555555);
+            guiGraphics.fill(panelX, panelY, panelX + panelW, panelY + panelH, 0xFF2D2D2D);
+
+            // List area inset background
+            int listAreaX = panelX + PANEL_PADDING;
+            int listAreaY = panelY + PANEL_PADDING + TITLE_HEIGHT;
+            guiGraphics.fill(listAreaX, listAreaY,
+                listAreaX + tabList.getWidth(), listAreaY + tabList.getHeight(), 0xFF1A1A1A);
+
+            // Title centered in panel header
+            guiGraphics.drawCenteredString(this.font, this.title,
+                panelX + panelW / 2, panelY + PANEL_PADDING + (TITLE_HEIGHT - font.lineHeight) / 2, 0xFFFFFF);
+
+            // Render widgets (the list)
+            super.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
+
+        @Override
+        public boolean isPauseScreen() {
+            return false;
+        }
+
+        @Override
+        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            if (keyCode == 256) {
+                this.minecraft.setScreen(parent);
+                return true;
+            }
+            return super.keyPressed(keyCode, scanCode, modifiers);
+        }
+
+        @Override
+        public boolean mouseClicked(double mouseX, double mouseY, int button) {
+            if (super.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+            // Click outside the panel closes the screen
+            if (button == 0) {
+                this.minecraft.setScreen(parent);
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public void onClose() {
+            this.minecraft.setScreen(parent);
+        }
+
+        private void selectTabEntry(TabEntry tab) {
+            onSelect.accept(tab.modId());
+            this.minecraft.setScreen(parent);
+        }
+
+        private class ModTabListWidget extends AbstractSelectionList<ModTabListWidget.TabListEntry> {
+
+            public ModTabListWidget(Minecraft mc, int width, int height, int y, int itemHeight) {
+                super(mc, width, height, y, itemHeight);
+            }
+
+            public void addTabEntry(TabEntry tab, boolean selected) {
+                TabListEntry entry = new TabListEntry(tab);
+                this.addEntry(entry);
+                if (selected) {
+                    this.setSelected(entry);
+                }
+            }
+
+            @Override
+            public int getRowWidth() {
+                return this.width - 12;
+            }
+
+            @Override
+            protected int getScrollbarPosition() {
+                return this.getX() + this.width - 6;
+            }
+
+            @Override
+            public int getRowLeft() {
+                return this.getX() + 2;
+            }
+
+            @Override
+            protected void renderSelection(@Nonnull GuiGraphics graphics, int y, int width, int height, int borderColor, int fillColor) {
+                // Empty — entry render() handles both hover and selected highlights
+            }
+
+            @Override
+            protected void renderListBackground(@Nonnull GuiGraphics graphics) {
+                // Empty — parent screen draws inset background
+            }
+
+            @Override
+            protected void renderListSeparators(@Nonnull GuiGraphics graphics) {
+                // Empty — no separator lines
+            }
+
+            @Override
+            protected void enableScissor(@Nonnull GuiGraphics graphics) {
+                graphics.enableScissor(this.getX(), this.getY(), this.getX() + this.width, this.getY() + this.height);
+            }
+
+            @Override
+            protected void updateWidgetNarration(@Nonnull NarrationElementOutput output) {
+            }
+
+            private class TabListEntry extends AbstractSelectionList.Entry<TabListEntry> {
+                final TabEntry tab;
+
+                TabListEntry(TabEntry tab) {
+                    this.tab = tab;
+                }
+
+                @Override
+                public void render(@Nonnull GuiGraphics graphics, int index, int top, int left,
+                                  int width, int height, int mouseX, int mouseY,
+                                  boolean hovering, float partialTick) {
+                    boolean selected = ModTabListWidget.this.getSelected() == this;
+                    if (hovering) {
+                        graphics.fill(left, top, left + width, top + height, 0x40FFFFFF);
+                    } else if (selected) {
+                        graphics.fill(left, top, left + width, top + height, 0x30FFFFFF);
+                    }
+                    int color = selected ? 0xFFFFFF : (hovering ? 0xFFFFFF : 0xCCCCCC);
+                    graphics.drawString(font, tab.displayName(),
+                        left + 6, top + (height - font.lineHeight) / 2, color);
+                }
+
+                @Override
+                public boolean mouseClicked(double mouseX, double mouseY, int button) {
+                    if (button == 0) {
+                        selectTabEntry(tab);
+                        return true;
+                    }
+                    return false;
+                }
+            }
+        }
     }
 }
