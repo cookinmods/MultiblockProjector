@@ -35,8 +35,9 @@ java {
     withSourcesJar()
 }
 
-sourceSets.main.resources {
-    srcDir 'src/generated/resources'
+sourceSets.main {
+    java.srcDir project(':api').file('src/main/java')
+    resources.srcDir 'src/generated/resources'
 }
 
 // Testmod source set: loaded in dev runs only, not included in release jar
@@ -118,8 +119,6 @@ repositories {
 }
 
 dependencies {
-    implementation project(':api')
-
     // JEI for testing
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
     runtimeOnly("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}")
