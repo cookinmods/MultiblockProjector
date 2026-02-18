@@ -107,6 +107,8 @@ repositories {
 }
 
 dependencies {
+    implementation project(':api')
+
     // JEI for testing
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
     runtimeOnly("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}")
