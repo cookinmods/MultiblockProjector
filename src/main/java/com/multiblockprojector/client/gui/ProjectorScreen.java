@@ -5,6 +5,7 @@ import com.multiblockprojector.api.MultiblockDefinition.SizeVariant;
 import com.multiblockprojector.common.items.ProjectorItem;
 import com.multiblockprojector.common.network.MessageProjectorSync;
 import com.multiblockprojector.common.projector.Settings;
+import com.multiblockprojector.client.schematic.SchematicIndex;
 import com.multiblockprojector.common.registry.MultiblockIndex;
 import com.multiblockprojector.common.registry.MultiblockIndex.TabEntry;
 import net.minecraft.client.Minecraft;
@@ -14,6 +15,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 
@@ -54,6 +56,8 @@ public class ProjectorScreen extends Screen {
 
     private SimpleMultiblockPreviewRenderer previewRenderer;
     private MultiblockDefinition selectedMultiblock;
+    private boolean selectedIsSchematic = false;
+    private ResourceLocation selectedSchematicId = null;
     private int currentSizePresetIndex = 0;
     private boolean isDragging = false;
 
@@ -66,7 +70,11 @@ public class ProjectorScreen extends Screen {
 
         var index = MultiblockIndex.get();
         var tabs = index.getTabs();
-        if (lastSelectedTab != null && tabs.stream().anyMatch(t -> t.modId().equals(lastSelectedTab))) {
+        SchematicIndex.rescan();
+        var schematicIndex = SchematicIndex.get();
+        var allTabs = new java.util.ArrayList<>(tabs);
+        allTabs.addAll(schematicIndex.getTabs());
+        if (lastSelectedTab != null && allTabs.stream().anyMatch(t -> t.modId().equals(lastSelectedTab))) {
             this.selectedTab = lastSelectedTab;
         } else {
             this.selectedTab = tabs.size() > 1 ? tabs.get(1).modId() : MultiblockIndex.ALL_TAB;
@@ -75,7 +83,17 @@ public class ProjectorScreen extends Screen {
     }
 
     private void updateFilteredMultiblocks() {
-        filteredMultiblocks = MultiblockIndex.get().getForTab(selectedTab);
+        var schematicIndex = SchematicIndex.get();
+        if (MultiblockIndex.ALL_TAB.equals(selectedTab)) {
+            var merged = new java.util.ArrayList<>(MultiblockIndex.get().getForTab(selectedTab));
+            merged.addAll(schematicIndex.getAll());
+            merged.sort(java.util.Comparator.comparing(d -> d.displayName().getString(), String.CASE_INSENSITIVE_ORDER));
+            filteredMultiblocks = merged;
+        } else if (schematicIndex.hasTab(selectedTab)) {
+            filteredMultiblocks = schematicIndex.getForTab(selectedTab);
+        } else {
+            filteredMultiblocks = MultiblockIndex.get().getForTab(selectedTab);
+        }
     }
 
     private void selectTab(String tabId) {
@@ -156,11 +174,13 @@ public class ProjectorScreen extends Screen {
     }
 
     private String getSelectedTabDisplayName() {
-        var tabs = MultiblockIndex.get().getTabs();
-        for (TabEntry tab : tabs) {
-            if (tab.modId().equals(selectedTab)) {
-                return tab.displayName();
-            }
+        var registryTabs = MultiblockIndex.get().getTabs();
+        for (var tab : registryTabs) {
+            if (tab.modId().equals(selectedTab)) return tab.displayName();
+        }
+        var schematicTabs = SchematicIndex.get().getTabs();
+        for (var tab : schematicTabs) {
+            if (tab.modId().equals(selectedTab)) return tab.displayName();
         }
         return "All";
     }
@@ -198,6 +218,9 @@ public class ProjectorScreen extends Screen {
 
     private void selectMultiblockForPreview(MultiblockDefinition multiblock) {
         this.selectedMultiblock = multiblock;
+        var schematicIndex = SchematicIndex.get();
+        this.selectedIsSchematic = schematicIndex.hasTab(multiblock.modId());
+        this.selectedSchematicId = selectedIsSchematic ? schematicIndex.getSchematicId(multiblock) : null;
 
         if (multiblock.isVariableSize()) {
             this.currentSizePresetIndex = multiblock.variants().size() / 2;
@@ -218,7 +241,16 @@ public class ProjectorScreen extends Screen {
     private void selectMultiblock(MultiblockDefinition multiblock) {
         if (multiblock == null) return;
 
-        settings.setMultiblock(multiblock);
+        if (selectedIsSchematic && selectedSchematicId != null) {
+            var entry = SchematicIndex.get().getEntryById(selectedSchematicId);
+            if (entry != null) {
+                settings.setSchematic(entry);
+            } else {
+                return;
+            }
+        } else {
+            settings.setMultiblock(multiblock);
+        }
         settings.setMode(Settings.Mode.PROJECTION);
         settings.setSizePresetIndex(currentSizePresetIndex);
         settings.applyTo(projectorStack);
@@ -501,9 +533,11 @@ public class ProjectorScreen extends Screen {
 
             // Size the list to fit content, capped to screen
             var tabs = MultiblockIndex.get().getTabs();
+            var allTabs = new java.util.ArrayList<>(tabs);
+            allTabs.addAll(SchematicIndex.get().getTabs());
             int listWidth = Math.min(220, this.width - 60);
             int listItemHeight = 20;
-            int contentHeight = tabs.size() * listItemHeight;
+            int contentHeight = allTabs.size() * listItemHeight;
             int maxListHeight = this.height - 80;
             int listHeight = Math.min(contentHeight + 4, maxListHeight);
 
@@ -520,7 +554,7 @@ public class ProjectorScreen extends Screen {
             tabList = new ModTabListWidget(this.minecraft, listWidth, listHeight, listY, listItemHeight);
             tabList.setX(listX);
 
-            for (TabEntry tab : tabs) {
+            for (TabEntry tab : allTabs) {
                 tabList.addTabEntry(tab, tab.modId().equals(currentTabId));
             }
 
