@@ -13,6 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -48,11 +49,12 @@ public class IEMultiblockAdapter {
                     NamedDefinition def = convertMultiblock(ieMultiblock);
                     results.add(def);
                 } catch (Exception e) {
-                    UniversalProjector.LOGGER.warn("Failed to convert IE multiblock: {}", e.getMessage());
+                    UniversalProjector.LOGGER.warn("Failed to convert IE multiblock", e);
                 }
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to load IE multiblocks", e);
+            UniversalProjector.LOGGER.error("Failed to discover IE multiblocks via reflection", e);
+            return results;
         }
         return results;
     }
@@ -66,12 +68,13 @@ public class IEMultiblockAdapter {
         String modId = "immersiveengineering";
         MultiblockCategory category = categorizeByName(uniqueName.getPath());
 
+        // Cache the reflection Method lookup so the lambda doesn't re-resolve it each call
+        Method getStructureMethod = ieMultiblock.getClass().getMethod("getStructure", Level.class);
+
         MultiblockDefinition.StructureProvider structureProvider = (variant, level) -> {
             try {
                 @SuppressWarnings("unchecked")
-                List<StructureBlockInfo> structureList = (List<StructureBlockInfo>) ieMultiblock.getClass()
-                    .getMethod("getStructure", Level.class)
-                    .invoke(ieMultiblock, level);
+                List<StructureBlockInfo> structureList = (List<StructureBlockInfo>) getStructureMethod.invoke(ieMultiblock, level);
 
                 Map<BlockPos, BlockEntry> blocks = new LinkedHashMap<>();
                 for (StructureBlockInfo info : structureList) {
@@ -86,17 +89,19 @@ public class IEMultiblockAdapter {
         };
 
         // Get size for the single variant
-        // Size requires a Level, but we need it for the SizeVariant definition.
-        // We'll defer getting the actual size by providing a reasonable default from reflection.
-        // IE multiblocks have a getSize(Level) method; we pass null and hope for the best,
-        // or we create a lazy variant.
         BlockPos size;
         try {
             Vec3i vec = IEReflectionHelper.getSize(ieMultiblock, null);
             size = new BlockPos(vec.getX(), vec.getY(), vec.getZ());
         } catch (Exception e) {
-            // Fallback: size will be computed from structure
-            size = new BlockPos(1, 1, 1);
+            // Derive size from structure instead of using a hardcoded fallback
+            try {
+                MultiblockStructure probe = structureProvider.create(null, null);
+                size = probe.size();
+            } catch (Exception e2) {
+                UniversalProjector.LOGGER.warn("Could not determine size for IE multiblock {}, using structure bounds", uniqueName);
+                size = new BlockPos(1, 1, 1);
+            }
         }
 
         MultiblockDefinition definition = MultiblockDefinition.fixed(
