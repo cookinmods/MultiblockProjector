@@ -26,6 +26,9 @@ import java.util.function.Consumer;
  * sub-screen and scrollable list using AbstractSelectionList.
  */
 public class ProjectorScreen extends Screen {
+    /** Remembers the last selected mod tab across screen openings. */
+    private static String lastSelectedTab = null;
+
     private final ItemStack projectorStack;
     private final InteractionHand hand;
     private final Settings settings;
@@ -63,7 +66,11 @@ public class ProjectorScreen extends Screen {
 
         var index = MultiblockIndex.get();
         var tabs = index.getTabs();
-        this.selectedTab = tabs.size() > 1 ? tabs.get(1).modId() : MultiblockIndex.ALL_TAB;
+        if (lastSelectedTab != null && tabs.stream().anyMatch(t -> t.modId().equals(lastSelectedTab))) {
+            this.selectedTab = lastSelectedTab;
+        } else {
+            this.selectedTab = tabs.size() > 1 ? tabs.get(1).modId() : MultiblockIndex.ALL_TAB;
+        }
         updateFilteredMultiblocks();
     }
 
@@ -73,6 +80,7 @@ public class ProjectorScreen extends Screen {
 
     private void selectTab(String tabId) {
         selectedTab = tabId;
+        lastSelectedTab = tabId;
         updateFilteredMultiblocks();
         selectedMultiblock = null;
         previewRenderer.setMultiblock(null);
@@ -286,6 +294,19 @@ public class ProjectorScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public void onClose() {
+        // If the screen closes without a multiblock being selected (e.g. ESC, game quit),
+        // reset mode from MULTIBLOCK_SELECTION back to NOTHING_SELECTED so the item
+        // doesn't get stuck in "selecting" mode across sessions.
+        if (settings.getMode() == Settings.Mode.MULTIBLOCK_SELECTION) {
+            settings.setMode(Settings.Mode.NOTHING_SELECTED);
+            settings.applyTo(projectorStack);
+            MessageProjectorSync.sendToServer(settings, hand);
+        }
+        super.onClose();
     }
 
     @Override
