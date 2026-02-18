@@ -2,6 +2,8 @@ package com.multiblockprojector;
 
 import com.multiblockprojector.common.CommonProxy;
 import com.multiblockprojector.common.UPContent;
+import com.multiblockprojector.common.registry.LegacyAdapterRegistrar;
+import com.multiblockprojector.common.registry.MultiblockRegistrySetup;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
@@ -36,7 +38,9 @@ public class UniversalProjector {
         
         // Register content
         UPContent.init(modEventBus);
-        
+        MultiblockRegistrySetup.init(modEventBus);
+        LegacyAdapterRegistrar.init(modEventBus);
+
         // Setup lifecycle events
         modEventBus.addListener(this::commonSetup);
         
