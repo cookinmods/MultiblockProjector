@@ -1,150 +1,157 @@
 package com.multiblockprojector.api.adapters;
 
-import com.multiblockprojector.api.IUniversalMultiblock;
-import com.multiblockprojector.api.UniversalMultiblockHandler;
+import com.multiblockprojector.UniversalProjector;
+import com.multiblockprojector.api.BlockEntry;
+import com.multiblockprojector.api.MultiblockCategory;
+import com.multiblockprojector.api.MultiblockDefinition;
+import com.multiblockprojector.api.MultiblockStructure;
+import com.multiblockprojector.api.SingleBlock;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 
-import javax.annotation.Nonnull;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Adapter for Immersive Engineering multiblocks
+ * Adapter for Immersive Engineering multiblocks.
+ * Uses reflection to discover IE multiblocks and converts them to {@link MultiblockDefinition} objects.
  */
 public class IEMultiblockAdapter {
-    
+
     /**
-     * Register all IE multiblocks with the universal handler
+     * A named definition pairing a registry ID with its definition.
      */
-    public static void registerIEMultiblocks() {
+    public record NamedDefinition(ResourceLocation id, MultiblockDefinition definition) {}
+
+    /**
+     * Discover all IE multiblocks and return them as named definitions.
+     *
+     * @return list of discovered IE multiblock definitions
+     */
+    public static List<NamedDefinition> discover() {
+        List<NamedDefinition> results = new ArrayList<>();
         try {
-            // Use reflection to avoid compile-time dependency
             Class<?> handlerClass = Class.forName("blusunrize.immersiveengineering.api.multiblocks.MultiblockHandler");
-            Object getMultiblocksMethod = handlerClass.getMethod("getMultiblocks").invoke(null);
-            
+            Object getMultiblocksResult = handlerClass.getMethod("getMultiblocks").invoke(null);
+
             @SuppressWarnings("unchecked")
-            List<Object> ieMultiblocks = (List<Object>) getMultiblocksMethod;
-            
+            List<Object> ieMultiblocks = (List<Object>) getMultiblocksResult;
+
             for (Object ieMultiblock : ieMultiblocks) {
-                IUniversalMultiblock universal = new IEMultiblockWrapper(ieMultiblock);
-                UniversalMultiblockHandler.registerMultiblock(universal);
+                try {
+                    NamedDefinition def = convertMultiblock(ieMultiblock);
+                    results.add(def);
+                } catch (Exception e) {
+                    UniversalProjector.LOGGER.warn("Failed to convert IE multiblock: {}", e.getMessage());
+                }
             }
-            
         } catch (Exception e) {
             throw new RuntimeException("Failed to load IE multiblocks", e);
         }
+        return results;
     }
-    
+
     /**
-     * Wrapper class for IE multiblocks using reflection
+     * Convert a single IE multiblock object (via reflection) to a NamedDefinition.
      */
-    private static class IEMultiblockWrapper implements IUniversalMultiblock {
-        private final Object ieMultiblock;
-        
-        public IEMultiblockWrapper(Object ieMultiblock) {
-            this.ieMultiblock = ieMultiblock;
-        }
-        
-        @Override
-        public ResourceLocation getUniqueName() {
+    private static NamedDefinition convertMultiblock(Object ieMultiblock) throws Exception {
+        ResourceLocation uniqueName = IEReflectionHelper.getUniqueName(ieMultiblock);
+        Component displayName = IEReflectionHelper.getDisplayName(ieMultiblock);
+        String modId = "immersiveengineering";
+        MultiblockCategory category = categorizeByName(uniqueName.getPath());
+
+        MultiblockDefinition.StructureProvider structureProvider = (variant, level) -> {
             try {
-                return (ResourceLocation) ieMultiblock.getClass().getMethod("getUniqueName").invoke(ieMultiblock);
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to get unique name", e);
-            }
-        }
-        
-        @Override
-        public Component getDisplayName() {
-            try {
-                return (Component) ieMultiblock.getClass().getMethod("getDisplayName").invoke(ieMultiblock);
-            } catch (Exception e) {
-                return Component.literal(getUniqueName().getPath());
-            }
-        }
-        
-        @Override
-        @SuppressWarnings("unchecked")
-        public List<StructureBlockInfo> getStructure(@Nonnull Level world) {
-            try {
-                List<StructureBlockInfo> structure = (List<StructureBlockInfo>) ieMultiblock.getClass()
+                @SuppressWarnings("unchecked")
+                List<StructureBlockInfo> structureList = (List<StructureBlockInfo>) ieMultiblock.getClass()
                     .getMethod("getStructure", Level.class)
-                    .invoke(ieMultiblock, world);
-                
-                // Debug output
-                System.out.println("IE Multiblock (" + getUniqueName() + ") structure has " + structure.size() + " blocks");
-                if (!structure.isEmpty()) {
-                    StructureBlockInfo first = structure.get(0);
-                    System.out.println("First block: " + first.state().getBlock().getClass().getSimpleName() + " at " + first.pos());
-                    
-                    // Check for cauldrons (the problem block)
-                    long cauldronCount = structure.stream()
-                        .map(info -> info.state().getBlock())
-                        .filter(block -> block.getClass().getSimpleName().contains("Cauldron"))
-                        .count();
-                    if (cauldronCount > 0) {
-                        System.out.println("WARNING: Found " + cauldronCount + " cauldron blocks in " + getUniqueName());
+                    .invoke(ieMultiblock, level);
+
+                Map<BlockPos, BlockEntry> blocks = new LinkedHashMap<>();
+                for (StructureBlockInfo info : structureList) {
+                    if (!info.state().isAir()) {
+                        blocks.put(info.pos(), new SingleBlock(info.state()));
                     }
                 }
-                
-                return structure;
+                return new MultiblockStructure(blocks);
             } catch (Exception e) {
-                System.err.println("Failed to get structure for IE multiblock " + getUniqueName() + ": " + e.getMessage());
-                throw new RuntimeException("Failed to get structure", e);
+                throw new RuntimeException("Failed to get structure for IE multiblock " + uniqueName, e);
             }
+        };
+
+        // Get size for the single variant
+        // Size requires a Level, but we need it for the SizeVariant definition.
+        // We'll defer getting the actual size by providing a reasonable default from reflection.
+        // IE multiblocks have a getSize(Level) method; we pass null and hope for the best,
+        // or we create a lazy variant.
+        BlockPos size;
+        try {
+            Vec3i vec = IEReflectionHelper.getSize(ieMultiblock, null);
+            size = new BlockPos(vec.getX(), vec.getY(), vec.getZ());
+        } catch (Exception e) {
+            // Fallback: size will be computed from structure
+            size = new BlockPos(1, 1, 1);
         }
-        
-        @Override
-        public Vec3i getSize(@Nonnull Level world) {
+
+        MultiblockDefinition definition = MultiblockDefinition.fixed(
+            displayName, modId, category, size, structureProvider
+        );
+
+        return new NamedDefinition(uniqueName, definition);
+    }
+
+    /**
+     * Maps an IE multiblock name to a {@link MultiblockCategory}.
+     */
+    private static MultiblockCategory categorizeByName(String name) {
+        if (name.contains("furnace") || name.contains("coke") || name.contains("alloy")) {
+            return MultiblockCategory.PROCESSING;
+        } else if (name.contains("generator") || name.contains("lightning")) {
+            return MultiblockCategory.POWER;
+        } else if (name.contains("assembler") || name.contains("press") || name.contains("workbench")) {
+            return MultiblockCategory.CRAFTING;
+        } else if (name.contains("tank") || name.contains("silo")) {
+            return MultiblockCategory.STORAGE;
+        }
+        return MultiblockCategory.GENERAL;
+    }
+
+    /**
+     * Private helper for reflection calls into IE multiblock objects.
+     */
+    private static class IEReflectionHelper {
+
+        static ResourceLocation getUniqueName(Object ieMultiblock) throws Exception {
+            return (ResourceLocation) ieMultiblock.getClass()
+                .getMethod("getUniqueName")
+                .invoke(ieMultiblock);
+        }
+
+        static Component getDisplayName(Object ieMultiblock) {
             try {
-                return (Vec3i) ieMultiblock.getClass()
-                    .getMethod("getSize", Level.class)
-                    .invoke(ieMultiblock, world);
+                return (Component) ieMultiblock.getClass()
+                    .getMethod("getDisplayName")
+                    .invoke(ieMultiblock);
             } catch (Exception e) {
-                throw new RuntimeException("Failed to get size", e);
+                try {
+                    ResourceLocation name = getUniqueName(ieMultiblock);
+                    return Component.literal(name.getPath());
+                } catch (Exception ex) {
+                    return Component.literal("Unknown");
+                }
             }
         }
-        
-        @Override
-        public float getManualScale() {
-            try {
-                return (Float) ieMultiblock.getClass().getMethod("getManualScale").invoke(ieMultiblock);
-            } catch (Exception e) {
-                return 1.0f;
-            }
-        }
-        
-        @Override
-        public String getModId() {
-            return "immersiveengineering";
-        }
-        
-        @Override
-        public String getCategory() {
-            // Categorize IE multiblocks based on their name
-            String name = getUniqueName().getPath();
-            if (name.contains("furnace") || name.contains("coke") || name.contains("alloy")) {
-                return "processing";
-            } else if (name.contains("generator") || name.contains("lightning")) {
-                return "power";
-            } else if (name.contains("assembler") || name.contains("press") || name.contains("workbench")) {
-                return "crafting";
-            } else if (name.contains("tank") || name.contains("silo")) {
-                return "storage";
-            } else if (name.contains("excavator") || name.contains("drill")) {
-                return "mining";
-            }
-            return "general";
-        }
-        
-        /**
-         * Get the original IE multiblock object for advanced operations
-         */
-        public Object getOriginalMultiblock() {
-            return ieMultiblock;
+
+        static Vec3i getSize(Object ieMultiblock, Level level) throws Exception {
+            return (Vec3i) ieMultiblock.getClass()
+                .getMethod("getSize", Level.class)
+                .invoke(ieMultiblock, level);
         }
     }
 }

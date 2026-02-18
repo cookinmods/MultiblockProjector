@@ -2,7 +2,7 @@ package com.multiblockprojector.api;
 
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.api.adapters.BloodMagicMultiblockAdapter;
-import com.multiblockprojector.api.adapters.IEMultiblockAdapter;
+
 import com.multiblockprojector.api.adapters.MekanismMultiblockAdapter;
 import net.minecraft.resources.ResourceLocation;
 
@@ -72,15 +72,10 @@ public class UniversalMultiblockHandler {
         
         int realMultiblocksFound = 0;
         
-        // Try to load IE multiblocks if available
+        // IE multiblocks are now registered via LegacyAdapterRegistrar into the new registry.
+        // Count any IE multiblocks that were already registered through the new path.
         if (isModLoaded("immersiveengineering")) {
-            try {
-                int beforeCount = MULTIBLOCKS.size();
-                IEMultiblockAdapter.registerIEMultiblocks();
-                realMultiblocksFound += MULTIBLOCKS.size() - beforeCount;
-            } catch (Exception e) {
-                UniversalProjector.LOGGER.error("Failed to load Immersive Engineering multiblocks", e);
-            }
+            UniversalProjector.LOGGER.info("IE multiblocks handled by registry-based adapter");
         }
         
         // Try to load Mekanism multiblocks if available
