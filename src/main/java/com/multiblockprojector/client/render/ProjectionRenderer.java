@@ -85,14 +85,37 @@ public class ProjectionRenderer {
             projection.process(layer, info -> {
                 BlockPos worldPos = center.offset(info.tPos);
                 BlockState ghostState = info.getDisplayState(level, worldPos, gameTick);
+                BlockState worldState = level.getBlockState(worldPos);
 
-                // Don't render air blocks
                 if (ghostState.isAir()) {
+                    // Air entry: render red-tinted overlay of world block if something is there
+                    if (!worldState.isAir()) {
+                        poseStack.pushPose();
+                        double x = worldPos.getX() - cameraPos.x;
+                        double y = worldPos.getY() - cameraPos.y;
+                        double z = worldPos.getZ() - cameraPos.z;
+                        poseStack.translate(x, y, z);
+                        try {
+                            renderGhostBlock(worldState, poseStack, buffer, level, worldPos, true);
+                        } catch (Exception e) { }
+                        poseStack.popPose();
+                    }
                     return false;
                 }
 
-                // Don't render if there's already a block here
-                if (!level.getBlockState(worldPos).isAir()) {
+                if (!worldState.isAir()) {
+                    // Solid entry with block already placed — red tint if wrong
+                    if (!info.blockEntry.matches(worldState)) {
+                        poseStack.pushPose();
+                        double x = worldPos.getX() - cameraPos.x;
+                        double y = worldPos.getY() - cameraPos.y;
+                        double z = worldPos.getZ() - cameraPos.z;
+                        poseStack.translate(x, y, z);
+                        try {
+                            renderGhostBlock(ghostState, poseStack, buffer, level, worldPos, true);
+                        } catch (Exception e) { }
+                        poseStack.popPose();
+                    }
                     return false;
                 }
 
@@ -105,8 +128,8 @@ public class ProjectionRenderer {
                 poseStack.translate(x, y, z);
 
                 try {
-                    // Render the block as a ghost using custom method
-                    renderGhostBlock(ghostState, poseStack, buffer, level, worldPos);
+                    // Render the block as a ghost using custom method (normal/missing = not incorrect)
+                    renderGhostBlock(ghostState, poseStack, buffer, level, worldPos, false);
 
                 } catch (Exception e) {
                     // Ignore rendering errors for individual blocks
@@ -118,12 +141,12 @@ public class ProjectionRenderer {
         }
     }
 
-    private static void renderGhostBlock(BlockState state, PoseStack poseStack, VertexConsumer buffer, Level level, BlockPos pos) {
+    private static void renderGhostBlock(BlockState state, PoseStack poseStack, VertexConsumer buffer, Level level, BlockPos pos, boolean isIncorrect) {
         // Always use manual rendering to ensure ghost effect with correct textures
-        renderGhostBlockManual(state, poseStack, buffer, level, pos);
+        renderGhostBlockManual(state, poseStack, buffer, level, pos, isIncorrect);
     }
 
-    private static void renderGhostBlockManual(BlockState state, PoseStack poseStack, VertexConsumer buffer, Level level, BlockPos pos) {
+    private static void renderGhostBlockManual(BlockState state, PoseStack poseStack, VertexConsumer buffer, Level level, BlockPos pos, boolean isIncorrect) {
         BlockRenderDispatcher blockRenderer = Minecraft.getInstance().getBlockRenderer();
         var model = blockRenderer.getBlockModel(state);
 
@@ -131,24 +154,29 @@ public class ProjectionRenderer {
         for (Direction direction : Direction.values()) {
             List<BakedQuad> quads = model.getQuads(state, direction, RandomSource.create(), ModelData.EMPTY, null);
             for (BakedQuad quad : quads) {
-                renderGhostQuad(poseStack, buffer, quad, GHOST_LIGHT);
+                renderGhostQuad(poseStack, buffer, quad, GHOST_LIGHT, isIncorrect);
             }
         }
 
         // Render faces without specific direction (general quads)
         List<BakedQuad> generalQuads = model.getQuads(state, null, RandomSource.create(), ModelData.EMPTY, null);
         for (BakedQuad quad : generalQuads) {
-            renderGhostQuad(poseStack, buffer, quad, GHOST_LIGHT);
+            renderGhostQuad(poseStack, buffer, quad, GHOST_LIGHT, isIncorrect);
         }
     }
 
-    private static void renderGhostQuad(PoseStack poseStack, VertexConsumer buffer, BakedQuad quad, int light) {
+    private static void renderGhostQuad(PoseStack poseStack, VertexConsumer buffer, BakedQuad quad, int light, boolean isIncorrect) {
         var last = poseStack.last();
         Matrix4f pose = last.pose();
 
         // Extract vertex data
         int[] vertexData = quad.getVertices();
         int stride = vertexData.length / 4; // 4 vertices per quad
+
+        // Red tint for incorrect blocks, white for normal ghost blocks
+        float r = 1.0f;
+        float g = isIncorrect ? 0.3f : 1.0f;
+        float b = isIncorrect ? 0.3f : 1.0f;
 
         for (int i = 0; i < 4; i++) {
             int idx = i * stride;
@@ -171,9 +199,9 @@ public class ProjectionRenderer {
             Vector3f normal = new Vector3f(dir.getStepX(), dir.getStepY(), dir.getStepZ());
             last.normal().transform(normal);
 
-            // Add vertex with transparency
+            // Add vertex with transparency (red tint if incorrect, white if normal)
             buffer.addVertex(pos.x(), pos.y(), pos.z())
-                  .setColor(1.0f, 1.0f, 1.0f, GHOST_ALPHA) // White with alpha
+                  .setColor(r, g, b, GHOST_ALPHA)
                   .setUv(u, v)
                   .setLight(light)
                   .setNormal(normal.x(), normal.y(), normal.z());
