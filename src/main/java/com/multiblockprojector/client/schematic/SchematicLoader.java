@@ -37,7 +37,7 @@ public class SchematicLoader {
     @Nullable
     public static BlockPos readSize(Path nbtFile) {
         try (InputStream is = Files.newInputStream(nbtFile)) {
-            CompoundTag root = NbtIo.readCompressed(is, NbtAccounter.unlimitedHeap());
+            CompoundTag root = NbtIo.readCompressed(is, NbtAccounter.create(100 * 1024 * 1024L));
             if (root.contains("size", Tag.TAG_LIST)) {
                 ListTag sizeTag = root.getList("size", Tag.TAG_INT);
                 if (sizeTag.size() == 3) {
@@ -60,7 +60,7 @@ public class SchematicLoader {
     public static MultiblockStructure load(Path nbtFile) {
         CompoundTag root;
         try (InputStream is = Files.newInputStream(nbtFile)) {
-            root = NbtIo.readCompressed(is, NbtAccounter.unlimitedHeap());
+            root = NbtIo.readCompressed(is, NbtAccounter.create(100 * 1024 * 1024L));
         } catch (IOException e) {
             return null;
         }

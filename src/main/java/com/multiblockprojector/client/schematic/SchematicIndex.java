@@ -40,6 +40,7 @@ public class SchematicIndex {
     private final Map<String, List<MultiblockDefinition>> byTab;
     private final List<MultiblockDefinition> all;
     private final Map<ResourceLocation, SchematicEntry> entriesById;
+    private final Map<ResourceLocation, MultiblockDefinition> definitionsById;
     private final Map<MultiblockDefinition, ResourceLocation> definitionToId;
 
     private SchematicIndex(
@@ -47,12 +48,14 @@ public class SchematicIndex {
         Map<String, List<MultiblockDefinition>> byTab,
         List<MultiblockDefinition> all,
         Map<ResourceLocation, SchematicEntry> entriesById,
+        Map<ResourceLocation, MultiblockDefinition> definitionsById,
         Map<MultiblockDefinition, ResourceLocation> definitionToId
     ) {
         this.tabs = tabs;
         this.byTab = byTab;
         this.all = all;
         this.entriesById = entriesById;
+        this.definitionsById = definitionsById;
         this.definitionToId = definitionToId;
     }
 
@@ -96,6 +99,12 @@ public class SchematicIndex {
     @Nullable
     public SchematicEntry getEntryById(ResourceLocation id) {
         return entriesById.get(id);
+    }
+
+    /** Looks up the cached definition for a schematic by its resource location ID. */
+    @Nullable
+    public MultiblockDefinition getDefinitionById(ResourceLocation id) {
+        return definitionsById.get(id);
     }
 
     /** Looks up the resource location ID for a given schematic definition. */
@@ -247,6 +256,7 @@ public class SchematicIndex {
         Map<String, List<MultiblockDefinition>> byTab = new LinkedHashMap<>();
         List<MultiblockDefinition> all = new ArrayList<>();
         Map<ResourceLocation, SchematicEntry> entriesById = new LinkedHashMap<>();
+        Map<ResourceLocation, MultiblockDefinition> definitionsById = new LinkedHashMap<>();
         Map<MultiblockDefinition, ResourceLocation> definitionToId = new IdentityHashMap<>();
 
         // Track tab display names for building tab list
@@ -256,6 +266,7 @@ public class SchematicIndex {
             MultiblockDefinition def = entry.toDefinition();
 
             entriesById.put(entry.id(), entry);
+            definitionsById.put(entry.id(), def);
             definitionToId.put(def, entry.id());
             byTab.computeIfAbsent(entry.tabId(), k -> new ArrayList<>()).add(def);
             all.add(def);
@@ -284,6 +295,7 @@ public class SchematicIndex {
             Collections.unmodifiableMap(unmodifiableByTab),
             Collections.unmodifiableList(all),
             Collections.unmodifiableMap(entriesById),
+            Collections.unmodifiableMap(definitionsById),
             definitionToId
         );
     }

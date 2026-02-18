@@ -93,6 +93,9 @@ public class MessageAutoBuild implements CustomPacketPayload {
             // Use tick=0 to get the first/default display state for placement
             BlockState targetState = info.getDisplayState(level, worldPos, 0);
 
+            // Skip air entries — auto-build should not erase existing blocks
+            if (targetState.isAir()) return false;
+
             // Check if we can place the block here
             if (level.isInWorldBounds(worldPos) && level.getWorldBorder().isWithinBounds(worldPos)) {
                 try {

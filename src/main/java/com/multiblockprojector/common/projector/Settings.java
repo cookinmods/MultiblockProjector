@@ -133,8 +133,10 @@ public class Settings {
     public MultiblockDefinition getMultiblock() {
         if (multiblockId == null) return null;
         if (source == Source.SCHEMATIC) {
-            var entry = com.multiblockprojector.client.schematic.SchematicIndex.get().getEntryById(multiblockId);
-            return entry != null ? entry.toDefinition() : null;
+            // SchematicIndex is client-only; return null on dedicated server
+            if (!net.neoforged.fml.loading.FMLEnvironment.dist.isClient()) return null;
+            return com.multiblockprojector.client.schematic.SchematicIndex.get()
+                .getDefinitionById(multiblockId);
         }
         return MultiblockIndex.get().getById(multiblockId).orElse(null);
     }
