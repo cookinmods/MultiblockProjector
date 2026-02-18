@@ -60,3 +60,6 @@ src/generated/
 
 # User-specific files
 local.properties
+
+# Git worktrees
+.worktrees/
