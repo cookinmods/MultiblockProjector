@@ -1,8 +1,10 @@
 package com.multiblockprojector.common.projector;
 
 import com.multiblockprojector.api.IUniversalMultiblock;
+import com.multiblockprojector.api.MultiblockDefinition;
 import com.multiblockprojector.api.UniversalMultiblockHandler;
 import com.multiblockprojector.common.network.MessageProjectorSync;
+import com.multiblockprojector.common.registry.MultiblockIndex;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -37,7 +39,7 @@ public class Settings {
     private Mode mode;
     private Rotation rotation;
     private BlockPos pos = null;
-    private IUniversalMultiblock multiblock = null;
+    private ResourceLocation multiblockId = null;
     private boolean mirror;
     private boolean isPlaced;
     private int sizePresetIndex = 0;
@@ -76,7 +78,7 @@ public class Settings {
 
             if (settingsNbt.contains(KEY_MULTIBLOCK, Tag.TAG_STRING)) {
                 String str = settingsNbt.getString(KEY_MULTIBLOCK);
-                this.multiblock = UniversalMultiblockHandler.getByUniqueName(ResourceLocation.parse(str));
+                this.multiblockId = ResourceLocation.parse(str);
             }
 
             if (settingsNbt.contains(KEY_POSITION, Tag.TAG_COMPOUND)) {
@@ -124,9 +126,40 @@ public class Settings {
     public Mode getMode() { return this.mode; }
     public void setMode(Mode mode) { this.mode = mode; }
     
-    public IUniversalMultiblock getMultiblock() { return this.multiblock; }
-    public void setMultiblock(@Nullable IUniversalMultiblock multiblock) { this.multiblock = multiblock; }
-    
+    @Nullable
+    public MultiblockDefinition getMultiblock() {
+        if (multiblockId == null) return null;
+        return MultiblockIndex.get().getById(multiblockId).orElse(null);
+    }
+
+    public void setMultiblock(@Nullable MultiblockDefinition multiblock) {
+        if (multiblock == null) {
+            this.multiblockId = null;
+        } else {
+            this.multiblockId = MultiblockIndex.get().getId(multiblock).orElse(null);
+        }
+    }
+
+    public void setMultiblockId(@Nullable ResourceLocation id) {
+        this.multiblockId = id;
+    }
+
+    @Nullable
+    public ResourceLocation getMultiblockId() {
+        return this.multiblockId;
+    }
+
+    /**
+     * Legacy bridge: returns IUniversalMultiblock for callers not yet migrated to MultiblockDefinition.
+     * @deprecated Use {@link #getMultiblock()} which returns {@link MultiblockDefinition}.
+     */
+    @Deprecated
+    @Nullable
+    public IUniversalMultiblock getLegacyMultiblock() {
+        if (multiblockId == null) return null;
+        return UniversalMultiblockHandler.getByUniqueName(multiblockId);
+    }
+
     public boolean isMirrored() { return this.mirror; }
     public void setMirror(boolean mirror) { this.mirror = mirror; }
     
@@ -148,8 +181,8 @@ public class Settings {
         nbt.putBoolean(KEY_PLACED, this.isPlaced);
         nbt.putInt(KEY_SIZE_PRESET, this.sizePresetIndex);
 
-        if (this.multiblock != null) {
-            nbt.putString(KEY_MULTIBLOCK, this.multiblock.getUniqueName().toString());
+        if (this.multiblockId != null) {
+            nbt.putString(KEY_MULTIBLOCK, this.multiblockId.toString());
         }
 
         if (this.pos != null) {

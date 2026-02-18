@@ -67,10 +67,10 @@ public class ProjectorClientHandler {
         // Clean up only aim projections that don't match current state
         cleanupAimProjections(settings);
         
-        if (settings.getMode() == Settings.Mode.PROJECTION && settings.getMultiblock() != null) {
+        if (settings.getMode() == Settings.Mode.PROJECTION && settings.getLegacyMultiblock() != null) {
             // Update projection position based on player aim
             updateProjectionAim(player, settings, mc.level);
-        } else if (settings.getMode() == Settings.Mode.BUILDING && settings.getPos() != null && settings.getMultiblock() != null) {
+        } else if (settings.getMode() == Settings.Mode.BUILDING && settings.getPos() != null && settings.getLegacyMultiblock() != null) {
             // Validate blocks during building mode (but don't show error messages here since it's handled globally)
             MultiblockProjection projection = ProjectionManager.getProjection(settings.getPos());
             if (projection != null) {
@@ -97,7 +97,7 @@ public class ProjectorClientHandler {
         
         Settings settings = ProjectorItem.getSettings(held);
         
-        if (settings.getMode() == Settings.Mode.PROJECTION && settings.getMultiblock() != null) {
+        if (settings.getMode() == Settings.Mode.PROJECTION && settings.getLegacyMultiblock() != null) {
             if (event.getAction() == 1) { // Mouse button press
                 if (event.getButton() == 0) { // Left click
                     if (lastAimPos != null) {
@@ -205,8 +205,8 @@ public class ProjectorClientHandler {
                 }
                 
                 // Create new projection at target position
-                var size = MultiblockProjection.getSizeFromSettings(settings.getMultiblock(), settings);
-                MultiblockProjection projection = new MultiblockProjection(level, settings.getMultiblock(), size);
+                var size = MultiblockProjection.getSizeFromSettings(settings.getLegacyMultiblock(), settings);
+                MultiblockProjection projection = new MultiblockProjection(level, settings.getLegacyMultiblock(), size);
                 projection.setRotation(settings.getRotation());
                 projection.setFlip(settings.isMirrored());
 
@@ -227,8 +227,8 @@ public class ProjectorClientHandler {
         player.swing(InteractionHand.MAIN_HAND, true); // true = send to server too
 
         // Create the projection at the specified position
-        var size = MultiblockProjection.getSizeFromSettings(settings.getMultiblock(), settings);
-        MultiblockProjection projection = new MultiblockProjection(player.level(), settings.getMultiblock(), size);
+        var size = MultiblockProjection.getSizeFromSettings(settings.getLegacyMultiblock(), settings);
+        MultiblockProjection projection = new MultiblockProjection(player.level(), settings.getLegacyMultiblock(), size);
         projection.setRotation(settings.getRotation());
         projection.setFlip(settings.isMirrored());
         ProjectionManager.setProjection(pos, projection);
@@ -249,7 +249,7 @@ public class ProjectorClientHandler {
         // Show confirmation message in orange
         player.displayClientMessage(
             Component.translatable("gui.multiblockprojector.projection_created", 
-                settings.getMultiblock().getDisplayName()).withStyle(net.minecraft.ChatFormatting.GOLD), 
+                settings.getLegacyMultiblock().getDisplayName()).withStyle(net.minecraft.ChatFormatting.GOLD), 
             true
         );
     }
@@ -259,8 +259,8 @@ public class ProjectorClientHandler {
         ProjectionManager.removeProjection(pos);
 
         // Create new projection with updated settings
-        var size = MultiblockProjection.getSizeFromSettings(settings.getMultiblock(), settings);
-        MultiblockProjection projection = new MultiblockProjection(level, settings.getMultiblock(), size);
+        var size = MultiblockProjection.getSizeFromSettings(settings.getLegacyMultiblock(), settings);
+        MultiblockProjection projection = new MultiblockProjection(level, settings.getLegacyMultiblock(), size);
         projection.setRotation(settings.getRotation());
         projection.setFlip(settings.isMirrored());
 
@@ -315,7 +315,7 @@ public class ProjectorClientHandler {
             if (stack.getItem() instanceof ProjectorItem) {
                 Settings settings = ProjectorItem.getSettings(stack);
                 
-                if (settings.getMode() == Settings.Mode.BUILDING && settings.getPos() != null && settings.getMultiblock() != null) {
+                if (settings.getMode() == Settings.Mode.BUILDING && settings.getPos() != null && settings.getLegacyMultiblock() != null) {
                     MultiblockProjection projection = ProjectionManager.getProjection(settings.getPos());
                     if (projection != null) {
                         // Validate projection and check for new incorrect blocks

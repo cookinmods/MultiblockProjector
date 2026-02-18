@@ -1,11 +1,12 @@
 package com.multiblockprojector.client.gui;
 
-import com.multiblockprojector.api.IUniversalMultiblock;
-import com.multiblockprojector.api.IVariableSizeMultiblock;
-import com.multiblockprojector.api.UniversalMultiblockHandler;
+import com.multiblockprojector.api.MultiblockDefinition;
+import com.multiblockprojector.api.MultiblockDefinition.SizeVariant;
 import com.multiblockprojector.common.items.ProjectorItem;
 import com.multiblockprojector.common.network.MessageProjectorSync;
 import com.multiblockprojector.common.projector.Settings;
+import com.multiblockprojector.common.registry.MultiblockIndex;
+import com.multiblockprojector.common.registry.MultiblockIndex.TabEntry;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -15,9 +16,7 @@ import net.minecraft.world.item.ItemStack;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * GUI screen for selecting multiblock structures with mod tabs
@@ -27,23 +26,15 @@ public class ProjectorScreen extends Screen {
     private final InteractionHand hand;
     private final Settings settings;
 
-    // All multiblocks from handler
-    private final List<IUniversalMultiblock> allMultiblocks;
     // Filtered multiblocks for current tab
-    private List<IUniversalMultiblock> filteredMultiblocks;
+    private List<MultiblockDefinition> filteredMultiblocks;
 
-    // Mod tabs - ordered map of modId -> display name
-    private static final Map<String, String> MOD_TABS = new LinkedHashMap<>();
-    static {
-        MOD_TABS.put("immersiveengineering", "Immersive Engineering");
-        MOD_TABS.put("mekanism", "Mekanism");
-        MOD_TABS.put("bloodmagic", "Blood Magic");
-    }
-
-    // Track which mods have multiblocks
-    private final Map<String, Boolean> modHasMultiblocks = new LinkedHashMap<>();
-    private String selectedModTab = null;
+    private String selectedTab;
     private final List<Button> tabButtons = new ArrayList<>();
+    private int tabScrollOffset = 0;
+    private Button tabLeftButton;
+    private Button tabRightButton;
+    private static final int MAX_VISIBLE_TABS = 4;
 
     private int scrollOffset = 0;
     private static final int ENTRIES_PER_PAGE = 7; // Reduced to make room for tabs
@@ -51,7 +42,7 @@ public class ProjectorScreen extends Screen {
     private static final int TAB_HEIGHT = 25;
 
     private SimpleMultiblockPreviewRenderer previewRenderer;
-    private IUniversalMultiblock selectedMultiblock;
+    private MultiblockDefinition selectedMultiblock;
     private int currentSizePresetIndex = 0;
     private Button sizeDecreaseButton;
     private Button sizeIncreaseButton;
@@ -63,47 +54,28 @@ public class ProjectorScreen extends Screen {
         this.projectorStack = projectorStack;
         this.hand = hand;
         this.settings = ProjectorItem.getSettings(projectorStack);
-        this.allMultiblocks = UniversalMultiblockHandler.getMultiblocks();
         this.previewRenderer = new SimpleMultiblockPreviewRenderer();
 
-        // Determine which mods have multiblocks
-        for (String modId : MOD_TABS.keySet()) {
-            boolean hasMultiblocks = allMultiblocks.stream()
-                .anyMatch(mb -> mb.getModId().equals(modId));
-            modHasMultiblocks.put(modId, hasMultiblocks);
-
-            // Select first available mod tab
-            if (selectedModTab == null && hasMultiblocks) {
-                selectedModTab = modId;
-            }
-        }
-
-        // Filter multiblocks for selected tab
+        var index = MultiblockIndex.get();
+        var tabs = index.getTabs();
+        // Default to first mod tab (skip "All"), fall back to "All"
+        this.selectedTab = tabs.size() > 1 ? tabs.get(1).modId() : MultiblockIndex.ALL_TAB;
         updateFilteredMultiblocks();
     }
 
     private void updateFilteredMultiblocks() {
-        if (selectedModTab == null) {
-            filteredMultiblocks = new ArrayList<>(allMultiblocks);
-        } else {
-            filteredMultiblocks = allMultiblocks.stream()
-                .filter(mb -> mb.getModId().equals(selectedModTab))
-                .toList();
-        }
+        filteredMultiblocks = MultiblockIndex.get().getForTab(selectedTab);
         scrollOffset = 0;
     }
 
-    private void selectTab(String modId) {
-        if (modHasMultiblocks.getOrDefault(modId, false)) {
-            selectedModTab = modId;
-            updateFilteredMultiblocks();
-            // Clear selection when switching tabs
-            selectedMultiblock = null;
-            sizeDecreaseButton.visible = false;
-            sizeIncreaseButton.visible = false;
-            previewRenderer.setMultiblock(null);
-            rebuildWidgets();
-        }
+    private void selectTab(String tabId) {
+        selectedTab = tabId;
+        updateFilteredMultiblocks();
+        selectedMultiblock = null;
+        if (sizeDecreaseButton != null) sizeDecreaseButton.visible = false;
+        if (sizeIncreaseButton != null) sizeIncreaseButton.visible = false;
+        previewRenderer.setMultiblock(null);
+        rebuildWidgets();
     }
 
     @Override
@@ -114,30 +86,45 @@ public class ProjectorScreen extends Screen {
         // Calculate layout areas - 50/50 split
         int leftPanelWidth = this.width / 2;
         int tabY = 10;
-        int tabWidth = (leftPanelWidth - 30) / MOD_TABS.size();
         int startY = tabY + TAB_HEIGHT + 15; // Below tabs
 
-        // Create tab buttons
-        int tabIndex = 0;
-        for (Map.Entry<String, String> entry : MOD_TABS.entrySet()) {
-            String modId = entry.getKey();
-            String displayName = entry.getValue();
-            boolean hasMultiblocks = modHasMultiblocks.getOrDefault(modId, false);
-            boolean isSelected = modId.equals(selectedModTab);
+        // Create tab buttons from MultiblockIndex
+        var tabs = MultiblockIndex.get().getTabs();
+        int visibleTabs = Math.min(MAX_VISIBLE_TABS, tabs.size());
+        int tabWidth = (leftPanelWidth - 30 - (tabs.size() > MAX_VISIBLE_TABS ? 30 : 0)) / visibleTabs;
+
+        // Add left arrow if needed
+        if (tabs.size() > MAX_VISIBLE_TABS) {
+            tabLeftButton = Button.builder(Component.literal("<"), btn -> {
+                if (tabScrollOffset > 0) { tabScrollOffset--; rebuildWidgets(); }
+            }).bounds(10, tabY, 12, TAB_HEIGHT - 2).build();
+            tabLeftButton.active = tabScrollOffset > 0;
+            this.addRenderableWidget(tabLeftButton);
+        }
+
+        // Create visible tab buttons
+        int tabStartX = tabs.size() > MAX_VISIBLE_TABS ? 24 : 10;
+        for (int i = 0; i < visibleTabs; i++) {
+            int tabIdx = tabScrollOffset + i;
+            if (tabIdx >= tabs.size()) break;
+            TabEntry tab = tabs.get(tabIdx);
 
             Button tabButton = Button.builder(
-                Component.literal(displayName),
-                (btn) -> selectTab(modId)
-            )
-            .bounds(10 + tabIndex * tabWidth, tabY, tabWidth - 2, TAB_HEIGHT - 2)
-            .build();
-
-            // Disable tab if mod has no multiblocks
-            tabButton.active = hasMultiblocks;
+                Component.literal(tab.displayName()),
+                btn -> selectTab(tab.modId())
+            ).bounds(tabStartX + i * tabWidth, tabY, tabWidth - 2, TAB_HEIGHT - 2).build();
 
             this.addRenderableWidget(tabButton);
             tabButtons.add(tabButton);
-            tabIndex++;
+        }
+
+        // Add right arrow if needed
+        if (tabs.size() > MAX_VISIBLE_TABS) {
+            tabRightButton = Button.builder(Component.literal(">"), btn -> {
+                if (tabScrollOffset < tabs.size() - MAX_VISIBLE_TABS) { tabScrollOffset++; rebuildWidgets(); }
+            }).bounds(tabStartX + visibleTabs * tabWidth + 2, tabY, 12, TAB_HEIGHT - 2).build();
+            tabRightButton.active = tabScrollOffset < tabs.size() - MAX_VISIBLE_TABS;
+            this.addRenderableWidget(tabRightButton);
         }
 
         // Create buttons for each visible multiblock in left panel
@@ -145,7 +132,7 @@ public class ProjectorScreen extends Screen {
             int index = scrollOffset + i;
             if (index >= filteredMultiblocks.size()) break;
 
-            IUniversalMultiblock multiblock = filteredMultiblocks.get(index);
+            MultiblockDefinition multiblock = filteredMultiblocks.get(index);
 
             // Account for scrollbar space if needed
             int buttonWidth = filteredMultiblocks.size() > ENTRIES_PER_PAGE ?
@@ -153,7 +140,7 @@ public class ProjectorScreen extends Screen {
                 leftPanelWidth - 30;       // No scrollbar needed
 
             Button button = Button.builder(
-                multiblock.getDisplayName(),
+                multiblock.displayName(),
                 (btn) -> selectMultiblockForPreview(multiblock)
             )
             .bounds(10, startY + i * ENTRY_HEIGHT, buttonWidth, 18)
@@ -200,49 +187,48 @@ public class ProjectorScreen extends Screen {
     }
 
     private void decreaseSizePreset() {
-        if (selectedMultiblock instanceof IVariableSizeMultiblock varMultiblock) {
+        if (selectedMultiblock != null && selectedMultiblock.isVariableSize()) {
             if (currentSizePresetIndex > 0) {
                 currentSizePresetIndex--;
-                updateSizeButtons(varMultiblock);
-                updatePreviewWithSize(varMultiblock);
+                updateSizeButtons(selectedMultiblock);
+                updatePreviewWithSize(selectedMultiblock);
             }
         }
     }
 
     private void increaseSizePreset() {
-        if (selectedMultiblock instanceof IVariableSizeMultiblock varMultiblock) {
-            if (currentSizePresetIndex < varMultiblock.getSizePresets().size() - 1) {
+        if (selectedMultiblock != null && selectedMultiblock.isVariableSize()) {
+            if (currentSizePresetIndex < selectedMultiblock.variants().size() - 1) {
                 currentSizePresetIndex++;
-                updateSizeButtons(varMultiblock);
-                updatePreviewWithSize(varMultiblock);
+                updateSizeButtons(selectedMultiblock);
+                updatePreviewWithSize(selectedMultiblock);
             }
         }
     }
 
-    private void updateSizeButtons(IVariableSizeMultiblock varMultiblock) {
-        int maxIndex = varMultiblock.getSizePresets().size() - 1;
+    private void updateSizeButtons(MultiblockDefinition multiblock) {
+        int maxIndex = multiblock.variants().size() - 1;
         sizeDecreaseButton.active = currentSizePresetIndex > 0;
         sizeIncreaseButton.active = currentSizePresetIndex < maxIndex;
     }
 
-    private void updatePreviewWithSize(IVariableSizeMultiblock varMultiblock) {
-        var preset = varMultiblock.getSizePresets().get(currentSizePresetIndex);
-        previewRenderer.setMultiblock(varMultiblock, preset.size());
+    private void updatePreviewWithSize(MultiblockDefinition multiblock) {
+        var variant = multiblock.variants().get(currentSizePresetIndex);
+        previewRenderer.setMultiblock(multiblock, variant);
     }
 
-    private void selectMultiblockForPreview(IUniversalMultiblock multiblock) {
+    private void selectMultiblockForPreview(MultiblockDefinition multiblock) {
         this.selectedMultiblock = multiblock;
 
         // Show/hide size buttons based on multiblock type
-        if (multiblock instanceof IVariableSizeMultiblock varMultiblock) {
-            // Default to middle size (e.g., index 2 for 5 sizes)
-            var presets = varMultiblock.getSizePresets();
-            this.currentSizePresetIndex = presets.size() / 2;
+        if (multiblock.isVariableSize()) {
+            var variants = multiblock.variants();
+            this.currentSizePresetIndex = variants.size() / 2;
 
             sizeDecreaseButton.visible = true;
             sizeIncreaseButton.visible = true;
-            updateSizeButtons(varMultiblock);
-            updatePreviewWithSize(varMultiblock);
+            updateSizeButtons(multiblock);
+            updatePreviewWithSize(multiblock);
         } else {
             this.currentSizePresetIndex = 0;
             sizeDecreaseButton.visible = false;
@@ -251,7 +237,7 @@ public class ProjectorScreen extends Screen {
         }
     }
 
-    private void selectMultiblock(IUniversalMultiblock multiblock) {
+    private void selectMultiblock(MultiblockDefinition multiblock) {
         if (multiblock == null) return;
 
         settings.setMultiblock(multiblock);
@@ -268,12 +254,12 @@ public class ProjectorScreen extends Screen {
         // Show confirmation message
         if (minecraft.player != null) {
             Component sizeInfo = Component.empty();
-            if (multiblock instanceof IVariableSizeMultiblock varMultiblock) {
-                var preset = varMultiblock.getSizePresets().get(currentSizePresetIndex);
-                sizeInfo = Component.literal(" (" + preset.getSizeString() + ")");
+            if (multiblock.isVariableSize()) {
+                var variant = multiblock.variants().get(currentSizePresetIndex);
+                sizeInfo = Component.literal(" (" + variant.getSizeString() + ")");
             }
             minecraft.player.displayClientMessage(
-                Component.translatable("gui.multiblockprojector.selected", multiblock.getDisplayName()).append(sizeInfo),
+                Component.translatable("gui.multiblockprojector.selected", multiblock.displayName()).append(sizeInfo),
                 true
             );
         }
@@ -294,15 +280,20 @@ public class ProjectorScreen extends Screen {
         guiGraphics.fill(leftPanelWidth, 0, this.width, this.height, 0x80404040);
 
         // Draw selected tab indicator
-        int tabWidth = (leftPanelWidth - 30) / MOD_TABS.size();
-        int tabIndex = 0;
-        for (String modId : MOD_TABS.keySet()) {
-            if (modId.equals(selectedModTab)) {
-                int tabX = 10 + tabIndex * tabWidth;
+        var tabs = MultiblockIndex.get().getTabs();
+        int visibleTabs = Math.min(MAX_VISIBLE_TABS, tabs.size());
+        int tabWidth = (leftPanelWidth - 30 - (tabs.size() > MAX_VISIBLE_TABS ? 30 : 0)) / visibleTabs;
+        int tabStartX = tabs.size() > MAX_VISIBLE_TABS ? 24 : 10;
+
+        for (int i = 0; i < visibleTabs; i++) {
+            int tabIdx = tabScrollOffset + i;
+            if (tabIdx >= tabs.size()) break;
+            TabEntry tab = tabs.get(tabIdx);
+            if (tab.modId().equals(selectedTab)) {
+                int tabX = tabStartX + i * tabWidth;
                 // Draw highlight under selected tab
                 guiGraphics.fill(tabX, tabY + TAB_HEIGHT - 4, tabX + tabWidth - 2, tabY + TAB_HEIGHT - 2, 0xFFFFFFFF);
             }
-            tabIndex++;
         }
 
         super.render(guiGraphics, mouseX, mouseY, partialTick);
@@ -311,10 +302,9 @@ public class ProjectorScreen extends Screen {
         guiGraphics.fill(leftPanelWidth, 0, leftPanelWidth + 2, this.height, 0xFF555555);
 
         // Draw "no multiblocks" message if tab is empty
-        if (filteredMultiblocks.isEmpty() && selectedModTab != null) {
-            String modName = MOD_TABS.getOrDefault(selectedModTab, selectedModTab);
+        if (filteredMultiblocks.isEmpty() && selectedTab != null) {
             guiGraphics.drawCenteredString(this.font,
-                Component.literal("No multiblocks from " + modName),
+                Component.literal("No multiblocks from " + selectedTab),
                 leftPanelWidth / 2, startY + 40, 0x888888);
         }
 
@@ -330,7 +320,7 @@ public class ProjectorScreen extends Screen {
 
         // Draw selected multiblock name above preview
         if (selectedMultiblock != null) {
-            Component selectedName = selectedMultiblock.getDisplayName();
+            Component selectedName = selectedMultiblock.displayName();
             int textX = previewX + previewWidth / 2;
             int textY = previewY - 15;
             guiGraphics.drawCenteredString(this.font, selectedName, textX, textY, 0xFFFFFF);
@@ -344,13 +334,13 @@ public class ProjectorScreen extends Screen {
         previewRenderer.render(guiGraphics, previewX, previewY, previewWidth, previewHeight, mouseX, mouseY, partialTick);
 
         // Draw size info for variable-size multiblocks (between the - and + buttons)
-        if (selectedMultiblock instanceof IVariableSizeMultiblock varMultiblock) {
-            var presets = varMultiblock.getSizePresets();
-            if (!presets.isEmpty() && currentSizePresetIndex < presets.size()) {
-                var preset = presets.get(currentSizePresetIndex);
+        if (selectedMultiblock != null && selectedMultiblock.isVariableSize()) {
+            var variants = selectedMultiblock.variants();
+            if (!variants.isEmpty() && currentSizePresetIndex < variants.size()) {
+                var variant = variants.get(currentSizePresetIndex);
                 int rightPanelCenterX = leftPanelWidth + (this.width - leftPanelWidth) / 2;
                 int sizeTextY = this.height - 45 + 6; // Vertically centered with buttons (button height 20, font ~8)
-                Component sizeText = preset.getFullDisplayName();
+                Component sizeText = variant.getFullDisplayName();
                 guiGraphics.drawCenteredString(this.font, sizeText, rightPanelCenterX, sizeTextY, 0xFFFFFF);
             }
         }
@@ -367,9 +357,9 @@ public class ProjectorScreen extends Screen {
             if (hoveredIndex >= 0 && hoveredIndex < ENTRIES_PER_PAGE) {
                 int multiblockIndex = scrollOffset + hoveredIndex;
                 if (multiblockIndex < filteredMultiblocks.size()) {
-                    IUniversalMultiblock multiblock = filteredMultiblocks.get(multiblockIndex);
+                    MultiblockDefinition multiblock = filteredMultiblocks.get(multiblockIndex);
                     guiGraphics.renderTooltip(this.font,
-                        Component.translatable("gui.multiblockprojector.tooltip", multiblock.getModId()),
+                        Component.translatable("gui.multiblockprojector.tooltip", multiblock.modId()),
                         mouseX, mouseY);
                 }
             }

@@ -60,7 +60,7 @@ public class ProjectorItem extends Item {
     
     public void appendHoverText(@Nonnull ItemStack stack, TooltipContext ctx, @Nonnull List<Component> tooltip, @Nonnull TooltipFlag flagIn) {
         Settings settings = getSettings(stack);
-        if (settings.getMultiblock() != null) {
+        if (settings.getLegacyMultiblock() != null) {
             tooltip.add(Component.translatable("desc.multiblockprojector.info.projector.build0"));
         } else {
             tooltip.add(Component.literal("Creates Projections of multiblock structures")
@@ -167,10 +167,10 @@ public class ProjectorItem extends Item {
     }
     
     private void createProjection(BlockPos pos, Settings settings, Level world) {
-        if (world.isClientSide && settings.getMultiblock() != null) {
+        if (world.isClientSide && settings.getLegacyMultiblock() != null) {
             // Create the projection with size from settings
-            var size = MultiblockProjection.getSizeFromSettings(settings.getMultiblock(), settings);
-            MultiblockProjection projection = new MultiblockProjection(world, settings.getMultiblock(), size);
+            var size = MultiblockProjection.getSizeFromSettings(settings.getLegacyMultiblock(), settings);
+            MultiblockProjection projection = new MultiblockProjection(world, settings.getLegacyMultiblock(), size);
             
             // Apply rotation and mirroring from settings
             projection.setRotation(settings.getRotation());
@@ -189,7 +189,7 @@ public class ProjectorItem extends Item {
     }
     
     private void updateProjection(Settings settings) {
-        if (settings.getPos() != null && settings.getMultiblock() != null) {
+        if (settings.getPos() != null && settings.getLegacyMultiblock() != null) {
             Level world = net.minecraft.client.Minecraft.getInstance().level;
             if (world != null) {
                 // Remove old projection
