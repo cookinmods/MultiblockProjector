@@ -3,7 +3,6 @@ package com.multiblockprojector.api;
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.api.adapters.BloodMagicMultiblockAdapter;
 
-import com.multiblockprojector.api.adapters.MekanismMultiblockAdapter;
 import net.minecraft.resources.ResourceLocation;
 
 import javax.annotation.Nullable;
@@ -78,20 +77,9 @@ public class UniversalMultiblockHandler {
             UniversalProjector.LOGGER.info("IE multiblocks handled by registry-based adapter");
         }
         
-        // Try to load Mekanism multiblocks if available
+        // Mekanism multiblocks are now registered via LegacyAdapterRegistrar into the new registry.
         if (isModLoaded("mekanism")) {
-            UniversalProjector.LOGGER.info("Mekanism mod detected, loading multiblocks...");
-            try {
-                int beforeCount = MULTIBLOCKS.size();
-                MekanismMultiblockAdapter.registerAllMultiblocks();
-                int mekanismCount = MULTIBLOCKS.size() - beforeCount;
-                realMultiblocksFound += mekanismCount;
-                UniversalProjector.LOGGER.info("Successfully loaded {} Mekanism multiblock(s)", mekanismCount);
-            } catch (Exception e) {
-                UniversalProjector.LOGGER.error("Failed to load Mekanism multiblocks", e);
-            }
-        } else {
-            UniversalProjector.LOGGER.info("Mekanism mod not detected");
+            UniversalProjector.LOGGER.info("Mekanism multiblocks handled by registry-based adapter");
         }
 
         // Try to load Blood Magic multiblocks if available

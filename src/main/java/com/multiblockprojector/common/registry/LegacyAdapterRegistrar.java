@@ -3,6 +3,7 @@ package com.multiblockprojector.common.registry;
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.api.ProjectorAPI;
 import com.multiblockprojector.api.adapters.IEMultiblockAdapter;
+import com.multiblockprojector.api.adapters.MekanismMultiblockAdapter;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModList;
@@ -36,7 +37,19 @@ public class LegacyAdapterRegistrar {
                 }
             }
 
-            // Adapters for other mods will be wired here in Tasks 9-10
+            if (ModList.get().isLoaded("mekanism")) {
+                try {
+                    var registry = MultiblockRegistrySetup.getRegistry();
+                    for (var entry : MekanismMultiblockAdapter.discover()) {
+                        if (!registry.containsKey(entry.id())) {
+                            helper.register(entry.id(), entry.definition());
+                        }
+                    }
+                    UniversalProjector.LOGGER.info("Registered Mekanism multiblocks from adapter");
+                } catch (Exception e) {
+                    UniversalProjector.LOGGER.error("Failed to load Mekanism multiblocks", e);
+                }
+            }
         });
     }
 }

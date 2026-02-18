@@ -1,27 +1,35 @@
 package com.multiblockprojector.api.adapters;
 
-import com.multiblockprojector.api.IUniversalMultiblock;
-import com.multiblockprojector.api.IVariableSizeMultiblock;
-import com.multiblockprojector.api.UniversalMultiblockHandler;
+import com.multiblockprojector.UniversalProjector;
+import com.multiblockprojector.api.BlockEntry;
+import com.multiblockprojector.api.MultiblockCategory;
+import com.multiblockprojector.api.MultiblockDefinition;
+import com.multiblockprojector.api.MultiblockStructure;
+import com.multiblockprojector.api.SingleBlock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 
-import javax.annotation.Nonnull;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Adapter for all Mekanism multiblock structures.
  * Supports both base Mekanism and Mekanism Generators multiblocks.
  */
 public class MekanismMultiblockAdapter {
+
+    /**
+     * A named definition pairing a registry ID with its definition.
+     */
+    public record NamedDefinition(ResourceLocation id, MultiblockDefinition definition) {}
 
     // ============================================
     // Block States - Base Mekanism (MekanismBlocks)
@@ -88,26 +96,27 @@ public class MekanismMultiblockAdapter {
     private static boolean blocksInitialized = false;
 
     /**
-     * Register all Mekanism multiblocks with the universal handler.
+     * Discover all Mekanism multiblocks and return them as named definitions.
+     *
+     * @return list of discovered Mekanism multiblock definitions
      */
-    public static void registerAllMultiblocks() {
-        System.out.println("[MultiblockProjector] Registering Mekanism multiblocks...");
+    public static List<NamedDefinition> discover() {
+        List<NamedDefinition> results = new ArrayList<>();
+        try {
+            initializeAllBlocks();
 
-        initializeAllBlocks();
-
-        // Register base Mekanism multiblocks
-        UniversalMultiblockHandler.registerMultiblock(new DynamicTankMultiblock());
-        UniversalMultiblockHandler.registerMultiblock(new InductionMatrixMultiblock());
-        UniversalMultiblockHandler.registerMultiblock(new ThermoelectricBoilerMultiblock());
-        UniversalMultiblockHandler.registerMultiblock(new ThermalEvaporationPlantMultiblock());
-        UniversalMultiblockHandler.registerMultiblock(new SPSMultiblock());
-
-        // Register Mekanism Generators multiblocks
-        UniversalMultiblockHandler.registerMultiblock(new FissionReactorMultiblock());
-        UniversalMultiblockHandler.registerMultiblock(new IndustrialTurbineMultiblock());
-        UniversalMultiblockHandler.registerMultiblock(new FusionReactorMultiblock());
-
-        System.out.println("[MultiblockProjector] Registered 8 Mekanism multiblocks");
+            results.add(createDynamicTank());
+            results.add(createInductionMatrix());
+            results.add(createThermoelectricBoiler());
+            results.add(createThermalEvaporationPlant());
+            results.add(createSPS());
+            results.add(createFissionReactor());
+            results.add(createIndustrialTurbine());
+            results.add(createFusionReactor());
+        } catch (Exception e) {
+            UniversalProjector.LOGGER.error("Failed to discover Mekanism multiblocks", e);
+        }
+        return results;
     }
 
     /**
@@ -150,11 +159,11 @@ public class MekanismMultiblockAdapter {
             // Shared
             structuralGlassBlock = getBlockStateFromRegistry(mekanismBlocksClass, "STRUCTURAL_GLASS");
 
-            System.out.println("[MultiblockProjector] Loaded base Mekanism blocks");
+            UniversalProjector.LOGGER.debug("Loaded base Mekanism blocks");
         } catch (ClassNotFoundException e) {
-            System.out.println("[MultiblockProjector] Base Mekanism not found");
+            UniversalProjector.LOGGER.debug("Base Mekanism not found");
         } catch (Exception e) {
-            System.err.println("[MultiblockProjector] Failed to load base Mekanism blocks: " + e.getMessage());
+            UniversalProjector.LOGGER.error("Failed to load base Mekanism blocks", e);
         }
 
         // Load Mekanism Generators blocks
@@ -186,11 +195,11 @@ public class MekanismMultiblockAdapter {
             // Shared (generators)
             reactorGlassBlock = getBlockStateFromRegistry(generatorsBlocksClass, "REACTOR_GLASS");
 
-            System.out.println("[MultiblockProjector] Loaded Mekanism Generators blocks");
+            UniversalProjector.LOGGER.debug("Loaded Mekanism Generators blocks");
         } catch (ClassNotFoundException e) {
-            System.out.println("[MultiblockProjector] Mekanism Generators not found");
+            UniversalProjector.LOGGER.debug("Mekanism Generators not found");
         } catch (Exception e) {
-            System.err.println("[MultiblockProjector] Failed to load Mekanism Generators blocks: " + e.getMessage());
+            UniversalProjector.LOGGER.error("Failed to load Mekanism Generators blocks", e);
         }
 
         // Apply fallbacks
@@ -306,912 +315,848 @@ public class MekanismMultiblockAdapter {
         return x > 0 && x < width - 1 && y > 0 && y < height - 1 && z > 0 && z < depth - 1;
     }
 
-    // ============================================
-    // 1. Dynamic Tank Multiblock
-    // ============================================
-
-    private static class DynamicTankMultiblock implements IVariableSizeMultiblock {
-        private static final List<SizePreset> SIZE_PRESETS = List.of(
-            new SizePreset("small", new Vec3i(3, 3, 3)),
-            new SizePreset("small_medium", new Vec3i(6, 6, 6)),
-            new SizePreset("medium", new Vec3i(9, 9, 9)),
-            new SizePreset("medium_large", new Vec3i(13, 13, 13)),
-            new SizePreset("large", new Vec3i(18, 18, 18))
-        );
-
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("mekanism", "dynamic_tank");
-        }
-
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Dynamic Tank");
-        }
-
-        @Override
-        public List<SizePreset> getSizePresets() {
-            return SIZE_PRESETS;
-        }
-
-        @Override
-        public List<StructureBlockInfo> getStructureAtSize(@Nonnull Level world, Vec3i size) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            int width = size.getX(), height = size.getY(), depth = size.getZ();
-            int centerX = width / 2, centerZ = depth / 2;
-
-            for (int x = 0; x < width; x++) {
-                for (int y = 0; y < height; y++) {
-                    for (int z = 0; z < depth; z++) {
-                        if (isInterior(x, y, z, width, height, depth)) continue;
-
-                        BlockPos pos = new BlockPos(x, y, z);
-                        BlockState block;
-
-                        if (isEdge(x, y, z, width, height, depth)) {
-                            block = dynamicTankBlock;
-                        } else if (y == 0) {
-                            block = dynamicTankBlock;
-                        } else if (y == 1 && x == centerX && z == 0) {
-                            block = dynamicValveBlock;
-                        } else if (y == 1 && x == centerX && z == depth - 1) {
-                            block = dynamicValveBlock;
-                        } else {
-                            block = structuralGlassBlock;
-                        }
-
-                        blocks.add(new StructureBlockInfo(pos, block, null));
-                    }
-                }
+    /**
+     * Convert a list of StructureBlockInfo to a MultiblockStructure, filtering out air blocks.
+     */
+    private static MultiblockStructure toMultiblockStructure(List<StructureBlockInfo> infoList) {
+        Map<BlockPos, BlockEntry> blockMap = new LinkedHashMap<>();
+        for (StructureBlockInfo info : infoList) {
+            if (!info.state().isAir()) {
+                blockMap.put(info.pos(), new SingleBlock(info.state()));
             }
-            return blocks;
         }
-
-        @Override
-        public float getManualScale() { return 0.8f; }
-
-        @Override
-        public String getModId() { return "mekanism"; }
-
-        @Override
-        public String getCategory() { return "storage"; }
+        return new MultiblockStructure(blockMap);
     }
 
     // ============================================
-    // 2. Induction Matrix Multiblock
+    // 1. Dynamic Tank
     // ============================================
 
-    private static class InductionMatrixMultiblock implements IVariableSizeMultiblock {
-        // Minimum 4x4x4 to have room for both cells and provider in interior (2x2x2 = 8 blocks)
-        private static final List<SizePreset> SIZE_PRESETS = List.of(
-            new SizePreset("small", new Vec3i(4, 4, 4)),
-            new SizePreset("small_medium", new Vec3i(6, 6, 6)),
-            new SizePreset("medium", new Vec3i(9, 9, 9)),
-            new SizePreset("medium_large", new Vec3i(13, 13, 13)),
-            new SizePreset("large", new Vec3i(18, 18, 18))
+    private static NamedDefinition createDynamicTank() {
+        List<MultiblockDefinition.SizeVariant> variants = List.of(
+            new MultiblockDefinition.SizeVariant(Component.literal("Small"), new BlockPos(3, 3, 3), true),
+            new MultiblockDefinition.SizeVariant(Component.literal("Small-Medium"), new BlockPos(6, 6, 6), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium"), new BlockPos(9, 9, 9), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium-Large"), new BlockPos(13, 13, 13), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Large"), new BlockPos(18, 18, 18), false)
         );
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("mekanism", "induction_matrix");
-        }
+        MultiblockDefinition.StructureProvider provider = (variant, level) -> {
+            Vec3i size = new Vec3i(variant.dimensions().getX(), variant.dimensions().getY(), variant.dimensions().getZ());
+            return toMultiblockStructure(generateDynamicTankStructure(size));
+        };
 
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Induction Matrix");
-        }
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("mekanism", "dynamic_tank"),
+            new MultiblockDefinition(
+                Component.literal("Dynamic Tank"),
+                "mekanism",
+                MultiblockCategory.STORAGE,
+                variants,
+                provider
+            )
+        );
+    }
 
-        @Override
-        public List<SizePreset> getSizePresets() {
-            return SIZE_PRESETS;
-        }
+    private static List<StructureBlockInfo> generateDynamicTankStructure(Vec3i size) {
+        List<StructureBlockInfo> blocks = new ArrayList<>();
+        int width = size.getX(), height = size.getY(), depth = size.getZ();
+        int centerX = width / 2, centerZ = depth / 2;
 
-        @Override
-        public List<StructureBlockInfo> getStructureAtSize(@Nonnull Level world, Vec3i size) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            int width = size.getX(), height = size.getY(), depth = size.getZ();
-            int centerX = width / 2, centerZ = depth / 2;
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int z = 0; z < depth; z++) {
+                    if (isInterior(x, y, z, width, height, depth)) continue;
 
-            // Track if we've placed the single provider yet
-            boolean providerPlaced = false;
+                    BlockPos pos = new BlockPos(x, y, z);
+                    BlockState block;
 
-            for (int x = 0; x < width; x++) {
-                for (int y = 0; y < height; y++) {
-                    for (int z = 0; z < depth; z++) {
-                        BlockPos pos = new BlockPos(x, y, z);
-                        BlockState block;
-
-                        if (isInterior(x, y, z, width, height, depth)) {
-                            // Interior: fill with Basic Induction Cells, place 1 Basic Induction Provider
-                            // Place provider at first interior position (1,1,1)
-                            if (!providerPlaced && x == 1 && y == 1 && z == 1) {
-                                block = basicInductionProviderBlock;
-                                providerPlaced = true;
-                            } else {
-                                block = basicInductionCellBlock;
-                            }
-                        } else if (isEdge(x, y, z, width, height, depth)) {
-                            block = inductionCasingBlock;
-                        } else if (y == 0) {
-                            // Bottom face - all casing
-                            block = inductionCasingBlock;
-                        } else if (y == 1 && x == centerX && z == 0) {
-                            // Front port (input)
-                            block = inductionPortBlock;
-                        } else if (y == 1 && x == centerX && z == depth - 1) {
-                            // Back port (output)
-                            block = inductionPortBlock;
-                        } else {
-                            // Other face positions - structural glass
-                            block = structuralGlassBlock;
-                        }
-
-                        blocks.add(new StructureBlockInfo(pos, block, null));
+                    if (isEdge(x, y, z, width, height, depth)) {
+                        block = dynamicTankBlock;
+                    } else if (y == 0) {
+                        block = dynamicTankBlock;
+                    } else if (y == 1 && x == centerX && z == 0) {
+                        block = dynamicValveBlock;
+                    } else if (y == 1 && x == centerX && z == depth - 1) {
+                        block = dynamicValveBlock;
+                    } else {
+                        block = structuralGlassBlock;
                     }
+
+                    blocks.add(new StructureBlockInfo(pos, block, null));
                 }
             }
-            return blocks;
         }
-
-        @Override
-        public float getManualScale() { return 0.8f; }
-
-        @Override
-        public String getModId() { return "mekanism"; }
-
-        @Override
-        public String getCategory() { return "power"; }
+        return blocks;
     }
 
     // ============================================
-    // 3. Thermoelectric Boiler Multiblock
+    // 2. Induction Matrix
     // ============================================
 
-    private static class ThermoelectricBoilerMultiblock implements IVariableSizeMultiblock {
-        private static final List<SizePreset> SIZE_PRESETS = List.of(
-            new SizePreset("small", new Vec3i(3, 4, 3)),
-            new SizePreset("small_medium", new Vec3i(6, 7, 6)),
-            new SizePreset("medium", new Vec3i(9, 10, 9)),
-            new SizePreset("medium_large", new Vec3i(13, 14, 13)),
-            new SizePreset("large", new Vec3i(18, 18, 18))
+    private static NamedDefinition createInductionMatrix() {
+        List<MultiblockDefinition.SizeVariant> variants = List.of(
+            new MultiblockDefinition.SizeVariant(Component.literal("Small"), new BlockPos(4, 4, 4), true),
+            new MultiblockDefinition.SizeVariant(Component.literal("Small-Medium"), new BlockPos(6, 6, 6), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium"), new BlockPos(9, 9, 9), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium-Large"), new BlockPos(13, 13, 13), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Large"), new BlockPos(18, 18, 18), false)
         );
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("mekanism", "thermoelectric_boiler");
-        }
+        MultiblockDefinition.StructureProvider provider = (variant, level) -> {
+            Vec3i size = new Vec3i(variant.dimensions().getX(), variant.dimensions().getY(), variant.dimensions().getZ());
+            return toMultiblockStructure(generateInductionMatrixStructure(size));
+        };
 
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Thermoelectric Boiler");
-        }
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("mekanism", "induction_matrix"),
+            new MultiblockDefinition(
+                Component.literal("Induction Matrix"),
+                "mekanism",
+                MultiblockCategory.POWER,
+                variants,
+                provider
+            )
+        );
+    }
 
-        @Override
-        public List<SizePreset> getSizePresets() {
-            return SIZE_PRESETS;
-        }
+    private static List<StructureBlockInfo> generateInductionMatrixStructure(Vec3i size) {
+        List<StructureBlockInfo> blocks = new ArrayList<>();
+        int width = size.getX(), height = size.getY(), depth = size.getZ();
+        int centerX = width / 2, centerZ = depth / 2;
 
-        @Override
-        public List<StructureBlockInfo> getStructureAtSize(@Nonnull Level world, Vec3i size) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            int width = size.getX(), height = size.getY(), depth = size.getZ();
-            int centerX = width / 2, centerZ = depth / 2;
+        // Track if we've placed the single provider yet
+        boolean providerPlaced = false;
 
-            // Interior layout (from wiki):
-            // - Top section: Steam cavity (air only)
-            // - Middle: Pressure Disperser layer (exactly 1 block tall, full layer)
-            // - Bottom section: Water cavity with Superheating Elements (must be contiguous!)
-            //
-            // Disperser layer should be near top to maximize water capacity
-            // For height H, interior is y=1 to y=H-2
-            // Put disperser at y = height - 3 (one layer below top interior)
-            int disperserY = height - 3;
-            if (disperserY < 2) disperserY = 2; // Minimum: at least 1 layer of water below
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int z = 0; z < depth; z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    BlockState block;
 
-            for (int x = 0; x < width; x++) {
-                for (int y = 0; y < height; y++) {
-                    for (int z = 0; z < depth; z++) {
-                        BlockPos pos = new BlockPos(x, y, z);
-                        BlockState block = null;
-
-                        if (isInterior(x, y, z, width, height, depth)) {
-                            if (y == disperserY) {
-                                // Full layer of pressure dispersers
-                                block = pressureDisperserBlock;
-                            } else if (y < disperserY) {
-                                // Water section: superheating elements must be CONTIGUOUS
-                                // Place them as a solid mass at the bottom of water cavity
-                                if (y == 1) {
-                                    // Bottom interior layer: solid floor of superheating elements
-                                    block = superheatingElementBlock;
-                                }
-                                // Other water layers are air (null)
-                            }
-                            // Steam section (y > disperserY) is air (null)
-
-                            if (block != null) {
-                                blocks.add(new StructureBlockInfo(pos, block, null));
-                            }
-                            continue;
-                        }
-
-                        if (isEdge(x, y, z, width, height, depth)) {
-                            block = boilerCasingBlock;
-                        } else if (y == 0) {
-                            // Bottom face - all casing
-                            block = boilerCasingBlock;
-                        } else if (y == 1 && x == centerX && z == 0) {
-                            // Water input valve (front, low)
-                            block = boilerValveBlock;
-                        } else if (y == 1 && x == centerX && z == depth - 1) {
-                            // Heated water output valve (back, low)
-                            block = boilerValveBlock;
-                        } else if (y == height - 2 && x == 0 && z == centerZ) {
-                            // Steam output valve (left side, high - in steam section)
-                            block = boilerValveBlock;
+                    if (isInterior(x, y, z, width, height, depth)) {
+                        // Interior: fill with Basic Induction Cells, place 1 Basic Induction Provider
+                        // Place provider at first interior position (1,1,1)
+                        if (!providerPlaced && x == 1 && y == 1 && z == 1) {
+                            block = basicInductionProviderBlock;
+                            providerPlaced = true;
                         } else {
-                            block = structuralGlassBlock;
+                            block = basicInductionCellBlock;
                         }
-
-                        blocks.add(new StructureBlockInfo(pos, block, null));
+                    } else if (isEdge(x, y, z, width, height, depth)) {
+                        block = inductionCasingBlock;
+                    } else if (y == 0) {
+                        // Bottom face - all casing
+                        block = inductionCasingBlock;
+                    } else if (y == 1 && x == centerX && z == 0) {
+                        // Front port (input)
+                        block = inductionPortBlock;
+                    } else if (y == 1 && x == centerX && z == depth - 1) {
+                        // Back port (output)
+                        block = inductionPortBlock;
+                    } else {
+                        // Other face positions - structural glass
+                        block = structuralGlassBlock;
                     }
+
+                    blocks.add(new StructureBlockInfo(pos, block, null));
                 }
             }
-            return blocks;
         }
-
-        @Override
-        public float getManualScale() { return 0.7f; }
-
-        @Override
-        public String getModId() { return "mekanism"; }
-
-        @Override
-        public String getCategory() { return "processing"; }
+        return blocks;
     }
 
     // ============================================
-    // 4. Industrial Turbine Multiblock
+    // 3. Thermoelectric Boiler
     // ============================================
 
-    private static class IndustrialTurbineMultiblock implements IVariableSizeMultiblock {
-        // From FTB wiki efficiency chart - optimal builds with saturating condensers
-        // Width must be ODD (5-17), height up to 18
-        private static final List<SizePreset> SIZE_PRESETS = List.of(
-            new SizePreset("small", new Vec3i(5, 9, 5)),        // 4 rotors, 2.93 MJ/t
-            new SizePreset("small_medium", new Vec3i(7, 13, 7)), // 6 rotors, 17.14 MJ/t
-            new SizePreset("medium", new Vec3i(9, 17, 9)),       // 8 rotors, 44.80 MJ/t
-            new SizePreset("medium_large", new Vec3i(13, 18, 13)), // 9 rotors, 88.25 MJ/t
-            new SizePreset("large", new Vec3i(17, 18, 17))       // 10 rotors, 133.71 MJ/t
+    private static NamedDefinition createThermoelectricBoiler() {
+        List<MultiblockDefinition.SizeVariant> variants = List.of(
+            new MultiblockDefinition.SizeVariant(Component.literal("Small"), new BlockPos(3, 4, 3), true),
+            new MultiblockDefinition.SizeVariant(Component.literal("Small-Medium"), new BlockPos(6, 7, 6), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium"), new BlockPos(9, 10, 9), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium-Large"), new BlockPos(13, 14, 13), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Large"), new BlockPos(18, 18, 18), false)
         );
 
-        // Optimal rotor counts from efficiency chart
-        private static int getOptimalRotorCount(int width, int height) {
-            // Based on FTB wiki efficiency chart
-            if (width == 5 && height >= 9) return 4;
-            if (width == 7 && height >= 13) return 6;
-            if (width == 9 && height >= 17) return 8;
-            if (width == 11 && height >= 18) return 9;
-            if (width == 13 && height >= 18) return 9;
-            if (width == 15 && height >= 18) return 10;
-            if (width == 17 && height >= 18) return 10;
+        MultiblockDefinition.StructureProvider provider = (variant, level) -> {
+            Vec3i size = new Vec3i(variant.dimensions().getX(), variant.dimensions().getY(), variant.dimensions().getZ());
+            return toMultiblockStructure(generateThermoelectricBoilerStructure(size));
+        };
 
-            // Fallback calculation for non-standard sizes
-            int interiorWidth = width - 2;
-            int maxRotor = 2 * interiorWidth - 1;
-            return Math.min(maxRotor, height - 5); // Leave room for disperser, coils, condensers, top
-        }
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("mekanism", "thermoelectric_boiler"),
+            new MultiblockDefinition(
+                Component.literal("Thermoelectric Boiler"),
+                "mekanism",
+                MultiblockCategory.PROCESSING,
+                variants,
+                provider
+            )
+        );
+    }
 
-        // Coil count: 1 coil supports 4 blades, blades = rotors * 2
-        private static int getCoilCount(int rotorCount) {
-            int blades = rotorCount * 2;
-            return (blades + 3) / 4; // Ceiling division
-        }
+    private static List<StructureBlockInfo> generateThermoelectricBoilerStructure(Vec3i size) {
+        List<StructureBlockInfo> blocks = new ArrayList<>();
+        int width = size.getX(), height = size.getY(), depth = size.getZ();
+        int centerX = width / 2, centerZ = depth / 2;
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("mekanism", "industrial_turbine");
-        }
+        // Interior layout (from wiki):
+        // - Top section: Steam cavity (air only)
+        // - Middle: Pressure Disperser layer (exactly 1 block tall, full layer)
+        // - Bottom section: Water cavity with Superheating Elements (must be contiguous!)
+        //
+        // Disperser layer should be near top to maximize water capacity
+        // For height H, interior is y=1 to y=H-2
+        // Put disperser at y = height - 3 (one layer below top interior)
+        int disperserY = height - 3;
+        if (disperserY < 2) disperserY = 2; // Minimum: at least 1 layer of water below
 
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Industrial Turbine");
-        }
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int z = 0; z < depth; z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    BlockState block = null;
 
-        @Override
-        public List<SizePreset> getSizePresets() {
-            return SIZE_PRESETS;
-        }
-
-        @Override
-        public List<StructureBlockInfo> getStructureAtSize(@Nonnull Level world, Vec3i size) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            int width = size.getX(), height = size.getY(), depth = size.getZ();
-            int centerX = width / 2, centerZ = depth / 2;
-
-            // Industrial Turbine rules (from wiki):
-            // - Square base, odd width 5-17, height up to 18
-            // - Edges: Turbine Casing only
-            // - Faces: Turbine Casing, Turbine Valve, or Structural Glass
-            // - Rotors: Single column in center, max length = 2 * interiorWidth - 1
-            // - Rotational Complex: On top of rotor column
-            // - Dispersers: Fill ENTIRE interior layer at Rotational Complex level (except center)
-            // - Vents: Replace casings at/above Rotational Complex layer, EXCEPT edges, exterior only
-            // - Coils: Directly above Rotational Complex, must be connected (vertical stack)
-            // - Condensers: Fill remaining interior above Rotational Complex layer
-
-            int rotorCount = getOptimalRotorCount(width, height);
-            int coilCount = getCoilCount(rotorCount);
-
-            // Y positions:
-            // y=0: Floor (casing)
-            // y=1 to y=rotorCount: Rotor column
-            // y=rotorCount+1: Rotational Complex + Dispersers
-            // y=rotorCount+2 to y=rotorCount+1+coilCount: Coils (center) + Condensers (rest)
-            // y=rotorCount+2+coilCount to y=height-2: More condensers
-            // y=height-1: Top (vents on non-edges)
-
-            int disperserY = rotorCount + 1;
-            int coilStartY = rotorCount + 2;
-            int coilEndY = coilStartY + coilCount - 1;
-
-            for (int x = 0; x < width; x++) {
-                for (int y = 0; y < height; y++) {
-                    for (int z = 0; z < depth; z++) {
-                        BlockPos pos = new BlockPos(x, y, z);
-                        BlockState block = null;
-
-                        boolean isOnEdge = isEdge(x, y, z, width, height, depth);
-                        boolean isInteriorBlock = isInterior(x, y, z, width, height, depth);
-                        boolean isOnFace = !isInteriorBlock && !isOnEdge;
-                        boolean isOnTop = (y == height - 1);
-                        boolean isOnBottom = (y == 0);
-                        boolean isCenter = (x == centerX && z == centerZ);
-
-                        // ===== INTERIOR BLOCKS =====
-                        if (isInteriorBlock) {
-                            if (isCenter) {
-                                // Center column
-                                if (y >= 1 && y <= rotorCount) {
-                                    // Rotor shaft
-                                    block = turbineRotorBlock;
-                                } else if (y == disperserY) {
-                                    // Rotational Complex on top of rotor
-                                    block = rotationalComplexBlock;
-                                } else if (y >= coilStartY && y <= coilEndY) {
-                                    // Coils directly above Rotational Complex (vertical stack)
-                                    block = electromagneticCoilBlock;
-                                }
-                                // Above coils at center: air or could be condenser
-                            } else {
-                                // Non-center interior positions
-                                if (y == disperserY) {
-                                    // Dispersers fill entire interior layer at Rotational Complex level
-                                    block = pressureDisperserBlock;
-                                } else if (y > disperserY && y < height - 1) {
-                                    // Condensers fill remaining interior above disperser layer
-                                    block = saturatingCondenserBlock;
-                                }
-                                // Below disperser layer (rotor area): air for blade clearance
+                    if (isInterior(x, y, z, width, height, depth)) {
+                        if (y == disperserY) {
+                            // Full layer of pressure dispersers
+                            block = pressureDisperserBlock;
+                        } else if (y < disperserY) {
+                            // Water section: superheating elements must be CONTIGUOUS
+                            // Place them as a solid mass at the bottom of water cavity
+                            if (y == 1) {
+                                // Bottom interior layer: solid floor of superheating elements
+                                block = superheatingElementBlock;
                             }
-
-                            if (block != null) {
-                                blocks.add(new StructureBlockInfo(pos, block, null));
-                            }
-                            continue;
+                            // Other water layers are air (null)
                         }
-
-                        // ===== EDGES (always Turbine Casing) =====
-                        if (isOnEdge) {
-                            block = turbineCasingBlock;
-                        }
-                        // ===== FACES (non-edge exterior) =====
-                        else if (isOnFace) {
-                            if (isOnBottom) {
-                                // Bottom face: casing
-                                block = turbineCasingBlock;
-                            } else if (isOnTop) {
-                                // Top face (non-edge): Vents
-                                block = turbineVentBlock;
-                            } else {
-                                // Side walls
-                                if (y >= disperserY) {
-                                    // At and above Rotational Complex layer: Vents allowed
-                                    block = turbineVentBlock;
-                                } else {
-                                    // Below Rotational Complex layer: Casing, Valve, or Glass
-                                    // Place valves for steam input (need minimum 2)
-                                    if (y == 1 && z == 0 && x == centerX) {
-                                        block = turbineValveBlock;
-                                    } else if (y == 1 && z == depth - 1 && x == centerX) {
-                                        block = turbineValveBlock;
-                                    } else {
-                                        // Structural glass for visibility
-                                        block = structuralGlassBlock;
-                                    }
-                                }
-                            }
-                        }
+                        // Steam section (y > disperserY) is air (null)
 
                         if (block != null) {
                             blocks.add(new StructureBlockInfo(pos, block, null));
                         }
+                        continue;
                     }
+
+                    if (isEdge(x, y, z, width, height, depth)) {
+                        block = boilerCasingBlock;
+                    } else if (y == 0) {
+                        // Bottom face - all casing
+                        block = boilerCasingBlock;
+                    } else if (y == 1 && x == centerX && z == 0) {
+                        // Water input valve (front, low)
+                        block = boilerValveBlock;
+                    } else if (y == 1 && x == centerX && z == depth - 1) {
+                        // Heated water output valve (back, low)
+                        block = boilerValveBlock;
+                    } else if (y == height - 2 && x == 0 && z == centerZ) {
+                        // Steam output valve (left side, high - in steam section)
+                        block = boilerValveBlock;
+                    } else {
+                        block = structuralGlassBlock;
+                    }
+
+                    blocks.add(new StructureBlockInfo(pos, block, null));
                 }
             }
-            return blocks;
         }
-
-        @Override
-        public float getManualScale() { return 0.6f; }
-
-        @Override
-        public String getModId() { return "mekanism"; }
-
-        @Override
-        public String getCategory() { return "power"; }
+        return blocks;
     }
 
     // ============================================
-    // 5. Thermal Evaporation Plant Multiblock
+    // 4. Thermal Evaporation Plant
     // ============================================
 
-    private static class ThermalEvaporationPlantMultiblock implements IVariableSizeMultiblock {
-        private static final List<SizePreset> SIZE_PRESETS = List.of(
-            new SizePreset("small", new Vec3i(4, 3, 4)),
-            new SizePreset("small_medium", new Vec3i(4, 6, 4)),
-            new SizePreset("medium", new Vec3i(4, 9, 4)),
-            new SizePreset("medium_large", new Vec3i(4, 14, 4)),
-            new SizePreset("large", new Vec3i(4, 18, 4))
+    private static NamedDefinition createThermalEvaporationPlant() {
+        List<MultiblockDefinition.SizeVariant> variants = List.of(
+            new MultiblockDefinition.SizeVariant(Component.literal("Small"), new BlockPos(4, 3, 4), true),
+            new MultiblockDefinition.SizeVariant(Component.literal("Small-Medium"), new BlockPos(4, 6, 4), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium"), new BlockPos(4, 9, 4), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium-Large"), new BlockPos(4, 14, 4), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Large"), new BlockPos(4, 18, 4), false)
         );
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("mekanism", "thermal_evaporation_plant");
-        }
-
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Thermal Evaporation Plant");
-        }
-
-        @Override
-        public List<SizePreset> getSizePresets() {
-            return SIZE_PRESETS;
-        }
-
-        @Override
-        public List<StructureBlockInfo> getStructureAtSize(@Nonnull Level world, Vec3i size) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            int height = size.getY();
-
-            // Thermal Evaporation Plant structure:
-            // - Fixed 4x4 footprint (full rectangle)
-            // - Base layer (y=0): Full 4x4 solid floor
-            // - Middle layers: 4x4 perimeter walls with hollow 2x2 interior
-            // - Top layer: Perimeter solid, center open (same as middle)
-            // - All 3 ports (1 controller + 2 valves) at y=1
-
-            for (int x = 0; x < 4; x++) {
-                for (int y = 0; y < height; y++) {
-                    for (int z = 0; z < 4; z++) {
-                        boolean isInterior = (x == 1 || x == 2) && (z == 1 || z == 2);
-                        boolean isBottom = (y == 0);
-
-                        BlockPos pos = new BlockPos(x, y, z);
-                        BlockState block;
-
-                        // Base layer (y=0): Full 4x4 solid floor
-                        if (isBottom) {
-                            blocks.add(new StructureBlockInfo(pos, thermalEvaporationBlock, null));
-                            continue;
-                        }
-
-                        // All layers above base (including top): interior is hollow/open
-                        if (isInterior) {
-                            continue;
-                        }
-
-                        // Wall positions (perimeter of 4x4)
-                        // All 3 ports at y=1 (row just above bottom)
-
-                        // Controller on front wall at y=1
-                        if (z == 0 && x == 1 && y == 1) {
-                            block = thermalEvaporationControllerBlock;
-                        }
-                        // Input valve on front wall at y=1
-                        else if (z == 0 && x == 2 && y == 1) {
-                            block = thermalEvaporationValveBlock;
-                        }
-                        // Output valve on back wall at y=1
-                        else if (z == 3 && x == 1 && y == 1) {
-                            block = thermalEvaporationValveBlock;
-                        }
-                        // All other wall positions: regular blocks
-                        else {
-                            block = thermalEvaporationBlock;
-                        }
-
-                        blocks.add(new StructureBlockInfo(pos, block, null));
-                    }
-                }
-            }
-            return blocks;
-        }
-
-        @Override
-        public float getManualScale() { return 0.8f; }
-
-        @Override
-        public String getModId() { return "mekanism"; }
-
-        @Override
-        public String getCategory() { return "processing"; }
-    }
-
-    // ============================================
-    // 6. SPS (Supercritical Phase Shifter) Multiblock
-    // ============================================
-
-    private static class SPSMultiblock implements IUniversalMultiblock {
-
-        // Exact grid from Mekanism source code (SPSValidator.java)
-        // 0 = not part of structure, 1 = frame (SPS Casing), 2 = side (Glass/Port)
-        private static final byte[][] ALLOWED_GRID = {
-            {0, 0, 1, 1, 1, 0, 0},
-            {0, 1, 2, 2, 2, 1, 0},
-            {1, 2, 2, 2, 2, 2, 1},
-            {1, 2, 2, 2, 2, 2, 1},
-            {1, 2, 2, 2, 2, 2, 1},
-            {0, 1, 2, 2, 2, 1, 0},
-            {0, 0, 1, 1, 1, 0, 0}
+        MultiblockDefinition.StructureProvider provider = (variant, level) -> {
+            Vec3i size = new Vec3i(variant.dimensions().getX(), variant.dimensions().getY(), variant.dimensions().getZ());
+            return toMultiblockStructure(generateThermalEvaporationPlantStructure(size));
         };
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("mekanism", "sps");
-        }
-
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Supercritical Phase Shifter");
-        }
-
-        @Override
-        public Vec3i getSize(@Nonnull Level world) {
-            return new Vec3i(7, 7, 7);
-        }
-
-        @Override
-        public List<StructureBlockInfo> getStructure(@Nonnull Level world) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-
-            // SPS is a 7x7x7 structure with cross-shaped faces
-            // Uses ALLOWED_GRID from Mekanism source for exact validation
-            // Ports on all 6 faces (4 sides + top + bottom), with coils attached inside
-            // Extra 2 ports on front face for energy input
-
-            for (int x = 0; x < 7; x++) {
-                for (int y = 0; y < 7; y++) {
-                    for (int z = 0; z < 7; z++) {
-                        BlockState block = null;
-
-                        // Check each face of the structure
-                        if (z == 0) {
-                            block = getSPSFaceBlock(x, y, "front");
-                        } else if (z == 6) {
-                            block = getSPSFaceBlock(x, y, "back");
-                        } else if (x == 0) {
-                            block = getSPSFaceBlock(z, y, "left");
-                        } else if (x == 6) {
-                            block = getSPSFaceBlock(z, y, "right");
-                        } else if (y == 0) {
-                            block = getSPSFaceBlock(x, z, "bottom");
-                        } else if (y == 6) {
-                            block = getSPSFaceBlock(x, z, "top");
-                        } else {
-                            // Interior - place Supercharged Coils attached to ports
-                            // Each face center port needs a coil inside
-
-                            // Coil for left port (0,3,3) -> inside at (1,3,3)
-                            if (x == 1 && y == 3 && z == 3) {
-                                block = superchargedCoilBlock;
-                            }
-                            // Coil for right port (6,3,3) -> inside at (5,3,3)
-                            else if (x == 5 && y == 3 && z == 3) {
-                                block = superchargedCoilBlock;
-                            }
-                            // Coil for front port (3,3,0) -> inside at (3,3,1)
-                            else if (x == 3 && y == 3 && z == 1) {
-                                block = superchargedCoilBlock;
-                            }
-                            // Coil for back port (3,3,6) -> inside at (3,3,5)
-                            else if (x == 3 && y == 3 && z == 5) {
-                                block = superchargedCoilBlock;
-                            }
-                            // Coil for top port (3,6,3) -> inside at (3,5,3)
-                            else if (x == 3 && y == 5 && z == 3) {
-                                block = superchargedCoilBlock;
-                            }
-                            // Coil for bottom port (3,0,3) -> inside at (3,1,3)
-                            else if (x == 3 && y == 1 && z == 3) {
-                                block = superchargedCoilBlock;
-                            }
-                            // Rest of interior is air (hollow)
-                        }
-
-                        if (block != null) {
-                            blocks.add(new StructureBlockInfo(new BlockPos(x, y, z), block, null));
-                        }
-                    }
-                }
-            }
-            return blocks;
-        }
-
-        private BlockState getSPSFaceBlock(int a, int b, String face) {
-            // Use exact grid from Mekanism source
-            byte gridValue = ALLOWED_GRID[b][a];
-
-            if (gridValue == 0) {
-                // Not part of structure (corner regions)
-                return null;
-            }
-
-            if (gridValue == 1) {
-                // Frame position - must be SPS Casing
-                return spsCasingBlock;
-            }
-
-            // gridValue == 2: Side position - can be Glass or Port
-
-            // Center ports on all 6 faces
-            if (a == 3 && b == 3) {
-                return spsPortBlock;
-            }
-
-            // Extra 2 ports on front face at row 1 (near top), cols 2 and 4
-            // These are for additional energy input capacity
-            if (face.equals("front") && b == 1 && (a == 2 || a == 4)) {
-                return spsPortBlock;
-            }
-
-            // All other side positions use Structural Glass
-            return structuralGlassBlock;
-        }
-
-        @Override
-        public float getManualScale() { return 0.6f; }
-
-        @Override
-        public String getModId() { return "mekanism"; }
-
-        @Override
-        public String getCategory() { return "processing"; }
-    }
-
-    // ============================================
-    // 7. Fission Reactor Multiblock
-    // ============================================
-
-    private static class FissionReactorMultiblock implements IVariableSizeMultiblock {
-        private static final List<SizePreset> SIZE_PRESETS = List.of(
-            new SizePreset("small", new Vec3i(3, 4, 3)),
-            new SizePreset("small_medium", new Vec3i(6, 7, 6)),
-            new SizePreset("medium", new Vec3i(9, 11, 9)),
-            new SizePreset("medium_large", new Vec3i(13, 14, 13)),
-            new SizePreset("large", new Vec3i(18, 18, 18))
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("mekanism", "thermal_evaporation_plant"),
+            new MultiblockDefinition(
+                Component.literal("Thermal Evaporation Plant"),
+                "mekanism",
+                MultiblockCategory.PROCESSING,
+                variants,
+                provider
+            )
         );
+    }
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("mekanism", "fission_reactor");
-        }
+    private static List<StructureBlockInfo> generateThermalEvaporationPlantStructure(Vec3i size) {
+        List<StructureBlockInfo> blocks = new ArrayList<>();
+        int height = size.getY();
 
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Fission Reactor");
-        }
+        // Thermal Evaporation Plant structure:
+        // - Fixed 4x4 footprint (full rectangle)
+        // - Base layer (y=0): Full 4x4 solid floor
+        // - Middle layers: 4x4 perimeter walls with hollow 2x2 interior
+        // - Top layer: Perimeter solid, center open (same as middle)
+        // - All 3 ports (1 controller + 2 valves) at y=1
 
-        @Override
-        public List<SizePreset> getSizePresets() {
-            return SIZE_PRESETS;
-        }
+        for (int x = 0; x < 4; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int z = 0; z < 4; z++) {
+                    boolean isInteriorPos = (x == 1 || x == 2) && (z == 1 || z == 2);
+                    boolean isBottom = (y == 0);
 
-        @Override
-        public List<StructureBlockInfo> getStructureAtSize(@Nonnull Level world, Vec3i size) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            int width = size.getX(), height = size.getY(), depth = size.getZ();
-            int centerX = width / 2, centerZ = depth / 2;
-            boolean addControlRods = width >= 5 && height >= 5 && depth >= 5;
-            int interiorMaxY = height - 2;
+                    BlockPos pos = new BlockPos(x, y, z);
+                    BlockState block;
 
-            for (int x = 0; x < width; x++) {
-                for (int y = 0; y < height; y++) {
-                    for (int z = 0; z < depth; z++) {
-                        BlockPos pos = new BlockPos(x, y, z);
-
-                        if (isInterior(x, y, z, width, height, depth)) {
-                            if (addControlRods && (x + z) % 2 == 0) {
-                                if (y < interiorMaxY) {
-                                    blocks.add(new StructureBlockInfo(pos, fissionFuelAssemblyBlock, null));
-                                } else {
-                                    blocks.add(new StructureBlockInfo(pos, fissionControlRodBlock, null));
-                                }
-                            }
-                            continue;
-                        }
-
-                        BlockState block;
-
-                        if (isEdge(x, y, z, width, height, depth)) {
-                            block = fissionCasingBlock;
-                        } else if (y == 0) {
-                            block = fissionCasingBlock;
-                        }
-                        else if (y == 1 && z == 0 && x == centerX) {
-                            block = fissionLogicAdapterBlock;
-                        }
-                        else if (y == 1 && x == 0 && z == centerZ - 1 && centerZ > 1) {
-                            block = fissionPortBlock;
-                        }
-                        else if (y == 1 && x == 0 && z == centerZ && depth > 3) {
-                            block = fissionPortBlock;
-                        }
-                        else if (y == 1 && x == width - 1 && z == centerZ - 1 && centerZ > 1) {
-                            block = fissionPortBlock;
-                        }
-                        else if (y == 1 && x == width - 1 && z == centerZ && depth > 3) {
-                            block = fissionPortBlock;
-                        }
-                        else {
-                            block = reactorGlassBlock;
-                        }
-
-                        blocks.add(new StructureBlockInfo(pos, block, null));
+                    // Base layer (y=0): Full 4x4 solid floor
+                    if (isBottom) {
+                        blocks.add(new StructureBlockInfo(pos, thermalEvaporationBlock, null));
+                        continue;
                     }
+
+                    // All layers above base (including top): interior is hollow/open
+                    if (isInteriorPos) {
+                        continue;
+                    }
+
+                    // Wall positions (perimeter of 4x4)
+                    // All 3 ports at y=1 (row just above bottom)
+
+                    // Controller on front wall at y=1
+                    if (z == 0 && x == 1 && y == 1) {
+                        block = thermalEvaporationControllerBlock;
+                    }
+                    // Input valve on front wall at y=1
+                    else if (z == 0 && x == 2 && y == 1) {
+                        block = thermalEvaporationValveBlock;
+                    }
+                    // Output valve on back wall at y=1
+                    else if (z == 3 && x == 1 && y == 1) {
+                        block = thermalEvaporationValveBlock;
+                    }
+                    // All other wall positions: regular blocks
+                    else {
+                        block = thermalEvaporationBlock;
+                    }
+
+                    blocks.add(new StructureBlockInfo(pos, block, null));
                 }
             }
-            return blocks;
         }
-
-        @Override
-        public float getManualScale() { return 0.8f; }
-
-        @Override
-        public String getModId() { return "mekanism"; }
-
-        @Override
-        public String getCategory() { return "power"; }
+        return blocks;
     }
 
     // ============================================
-    // 8. Fusion Reactor Multiblock
+    // 5. SPS (Supercritical Phase Shifter) - Fixed Size
     // ============================================
 
-    private static class FusionReactorMultiblock implements IUniversalMultiblock {
+    // Exact grid from Mekanism source code (SPSValidator.java)
+    // 0 = not part of structure, 1 = frame (SPS Casing), 2 = side (Glass/Port)
+    private static final byte[][] SPS_ALLOWED_GRID = {
+        {0, 0, 1, 1, 1, 0, 0},
+        {0, 1, 2, 2, 2, 1, 0},
+        {1, 2, 2, 2, 2, 2, 1},
+        {1, 2, 2, 2, 2, 2, 1},
+        {1, 2, 2, 2, 2, 2, 1},
+        {0, 1, 2, 2, 2, 1, 0},
+        {0, 0, 1, 1, 1, 0, 0}
+    };
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("mekanism", "fusion_reactor");
-        }
+    private static NamedDefinition createSPS() {
+        BlockPos size = new BlockPos(7, 7, 7);
 
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Fusion Reactor");
-        }
+        MultiblockDefinition.StructureProvider provider = (variant, level) ->
+            toMultiblockStructure(generateSPSStructure());
 
-        @Override
-        public Vec3i getSize(@Nonnull Level world) {
-            return new Vec3i(5, 5, 5);
-        }
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("mekanism", "sps"),
+            MultiblockDefinition.fixed(
+                Component.literal("Supercritical Phase Shifter"),
+                "mekanism",
+                MultiblockCategory.PROCESSING,
+                size,
+                provider
+            )
+        );
+    }
 
-        @Override
-        public List<StructureBlockInfo> getStructure(@Nonnull Level world) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
+    private static List<StructureBlockInfo> generateSPSStructure() {
+        List<StructureBlockInfo> blocks = new ArrayList<>();
 
-            // Fusion Reactor is a fixed 5-layer structure
-            // Made of: 75 Frame, 2 Port, 1 Controller, 8 Glass, 1 Laser Focus Matrix
-            // Legend: F=Frame, P=Port, C=Controller, L=Laser Focus, G=Glass, .=air
+        // SPS is a 7x7x7 structure with cross-shaped faces
+        // Uses ALLOWED_GRID from Mekanism source for exact validation
+        // Ports on all 6 faces (4 sides + top + bottom), with coils attached inside
+        // Extra 2 ports on front face for energy input
 
-            // Layer 0 (bottom) - Solid plus shape of Frame (13 blocks)
-            int[][] layer0 = {
-                {0, 0, 1, 0, 0},
-                {0, 1, 1, 1, 0},
-                {1, 1, 1, 1, 1},
-                {0, 1, 1, 1, 0},
-                {0, 0, 1, 0, 0}
-            };
-            addFusionLayerSimple(blocks, 0, layer0, fusionFrameBlock);
+        for (int x = 0; x < 7; x++) {
+            for (int y = 0; y < 7; y++) {
+                for (int z = 0; z < 7; z++) {
+                    BlockState block = null;
 
-            // Layer 1 - Hollow square without corners, ALL Frame (12 blocks)
-            // Pattern:
-            //   . F F F .
-            //   F . . . F
-            //   F . . . F
-            //   F . . . F
-            //   . F F F .
-            int[][] layer1 = {
-                {0, 1, 1, 1, 0},
-                {1, 0, 0, 0, 1},
-                {1, 0, 0, 0, 1},
-                {1, 0, 0, 0, 1},
-                {0, 1, 1, 1, 0}
-            };
-            addFusionLayerSimple(blocks, 1, layer1, fusionFrameBlock);
+                    // Check each face of the structure
+                    if (z == 0) {
+                        block = getSPSFaceBlock(x, y, "front");
+                    } else if (z == 6) {
+                        block = getSPSFaceBlock(x, y, "back");
+                    } else if (x == 0) {
+                        block = getSPSFaceBlock(z, y, "left");
+                    } else if (x == 6) {
+                        block = getSPSFaceBlock(z, y, "right");
+                    } else if (y == 0) {
+                        block = getSPSFaceBlock(x, z, "bottom");
+                    } else if (y == 6) {
+                        block = getSPSFaceBlock(x, z, "top");
+                    } else {
+                        // Interior - place Supercharged Coils attached to ports
+                        // Each face center port needs a coil inside
 
-            // Layer 2 (middle) - Full square perimeter
-            // Ports on left/right (across from each other)
-            // Laser at front center with glass on all sides
-            // Back has T-shape glass to match front
-            // Pattern (looking from above, front=south/z=4):
-            //   F G G G F   <- Back (north), T-shape glass
-            //   G . . . G
-            //   P . . . P   <- Ports on left/right sides
-            //   G . . . G
-            //   F G L G F   <- Front (south), Laser in middle
-            int[][] layer2 = {
-                {1, 3, 3, 3, 1},
-                {3, 0, 0, 0, 3},
-                {2, 0, 0, 0, 2},
-                {3, 0, 0, 0, 3},
-                {1, 3, 4, 3, 1}
-            };
-            addFusionLayerWithTypes(blocks, 2, layer2);
+                        // Coil for left port (0,3,3) -> inside at (1,3,3)
+                        if (x == 1 && y == 3 && z == 3) {
+                            block = superchargedCoilBlock;
+                        }
+                        // Coil for right port (6,3,3) -> inside at (5,3,3)
+                        else if (x == 5 && y == 3 && z == 3) {
+                            block = superchargedCoilBlock;
+                        }
+                        // Coil for front port (3,3,0) -> inside at (3,3,1)
+                        else if (x == 3 && y == 3 && z == 1) {
+                            block = superchargedCoilBlock;
+                        }
+                        // Coil for back port (3,3,6) -> inside at (3,3,5)
+                        else if (x == 3 && y == 3 && z == 5) {
+                            block = superchargedCoilBlock;
+                        }
+                        // Coil for top port (3,6,3) -> inside at (3,5,3)
+                        else if (x == 3 && y == 5 && z == 3) {
+                            block = superchargedCoilBlock;
+                        }
+                        // Coil for bottom port (3,0,3) -> inside at (3,1,3)
+                        else if (x == 3 && y == 1 && z == 3) {
+                            block = superchargedCoilBlock;
+                        }
+                        // Rest of interior is air (hollow)
+                    }
 
-            // Layer 3 - Same as Layer 1, ALL Frame (12 blocks)
-            addFusionLayerSimple(blocks, 3, layer1, fusionFrameBlock);
-
-            // Layer 4 (top) - Solid plus shape with Controller in center (12 Frame + 1 Controller)
-            int[][] layer4 = {
-                {0, 0, 1, 0, 0},
-                {0, 1, 1, 1, 0},
-                {1, 1, 5, 1, 1},
-                {0, 1, 1, 1, 0},
-                {0, 0, 1, 0, 0}
-            };
-            addFusionLayerWithTypes(blocks, 4, layer4);
-
-            return blocks;
-        }
-
-        private void addFusionLayerSimple(List<StructureBlockInfo> blocks, int y, int[][] pattern, BlockState block) {
-            for (int x = 0; x < 5; x++) {
-                for (int z = 0; z < 5; z++) {
-                    if (pattern[z][x] == 1) {
+                    if (block != null) {
                         blocks.add(new StructureBlockInfo(new BlockPos(x, y, z), block, null));
                     }
                 }
             }
         }
+        return blocks;
+    }
 
-        private void addFusionLayerWithTypes(List<StructureBlockInfo> blocks, int y, int[][] pattern) {
-            // 0=air, 1=Frame, 2=Port, 3=Glass, 4=Laser Focus, 5=Controller
-            for (int x = 0; x < 5; x++) {
-                for (int z = 0; z < 5; z++) {
-                    int val = pattern[z][x];
-                    if (val == 0) continue;
+    private static BlockState getSPSFaceBlock(int a, int b, String face) {
+        // Use exact grid from Mekanism source
+        byte gridValue = SPS_ALLOWED_GRID[b][a];
 
-                    BlockState block = switch (val) {
-                        case 1 -> fusionFrameBlock;
-                        case 2 -> fusionPortBlock;
-                        case 3 -> reactorGlassBlock;
-                        case 4 -> laserFocusMatrixBlock;
-                        case 5 -> fusionControllerBlock;
-                        default -> fusionFrameBlock;
-                    };
+        if (gridValue == 0) {
+            // Not part of structure (corner regions)
+            return null;
+        }
+
+        if (gridValue == 1) {
+            // Frame position - must be SPS Casing
+            return spsCasingBlock;
+        }
+
+        // gridValue == 2: Side position - can be Glass or Port
+
+        // Center ports on all 6 faces
+        if (a == 3 && b == 3) {
+            return spsPortBlock;
+        }
+
+        // Extra 2 ports on front face at row 1 (near top), cols 2 and 4
+        // These are for additional energy input capacity
+        if (face.equals("front") && b == 1 && (a == 2 || a == 4)) {
+            return spsPortBlock;
+        }
+
+        // All other side positions use Structural Glass
+        return structuralGlassBlock;
+    }
+
+    // ============================================
+    // 6. Fission Reactor
+    // ============================================
+
+    private static NamedDefinition createFissionReactor() {
+        List<MultiblockDefinition.SizeVariant> variants = List.of(
+            new MultiblockDefinition.SizeVariant(Component.literal("Small"), new BlockPos(3, 4, 3), true),
+            new MultiblockDefinition.SizeVariant(Component.literal("Small-Medium"), new BlockPos(6, 7, 6), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium"), new BlockPos(9, 11, 9), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium-Large"), new BlockPos(13, 14, 13), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Large"), new BlockPos(18, 18, 18), false)
+        );
+
+        MultiblockDefinition.StructureProvider provider = (variant, level) -> {
+            Vec3i size = new Vec3i(variant.dimensions().getX(), variant.dimensions().getY(), variant.dimensions().getZ());
+            return toMultiblockStructure(generateFissionReactorStructure(size));
+        };
+
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("mekanism", "fission_reactor"),
+            new MultiblockDefinition(
+                Component.literal("Fission Reactor"),
+                "mekanism",
+                MultiblockCategory.POWER,
+                variants,
+                provider
+            )
+        );
+    }
+
+    private static List<StructureBlockInfo> generateFissionReactorStructure(Vec3i size) {
+        List<StructureBlockInfo> blocks = new ArrayList<>();
+        int width = size.getX(), height = size.getY(), depth = size.getZ();
+        int centerX = width / 2, centerZ = depth / 2;
+        boolean addControlRods = width >= 5 && height >= 5 && depth >= 5;
+        int interiorMaxY = height - 2;
+
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int z = 0; z < depth; z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+
+                    if (isInterior(x, y, z, width, height, depth)) {
+                        if (addControlRods && (x + z) % 2 == 0) {
+                            if (y < interiorMaxY) {
+                                blocks.add(new StructureBlockInfo(pos, fissionFuelAssemblyBlock, null));
+                            } else {
+                                blocks.add(new StructureBlockInfo(pos, fissionControlRodBlock, null));
+                            }
+                        }
+                        continue;
+                    }
+
+                    BlockState block;
+
+                    if (isEdge(x, y, z, width, height, depth)) {
+                        block = fissionCasingBlock;
+                    } else if (y == 0) {
+                        block = fissionCasingBlock;
+                    }
+                    else if (y == 1 && z == 0 && x == centerX) {
+                        block = fissionLogicAdapterBlock;
+                    }
+                    else if (y == 1 && x == 0 && z == centerZ - 1 && centerZ > 1) {
+                        block = fissionPortBlock;
+                    }
+                    else if (y == 1 && x == 0 && z == centerZ && depth > 3) {
+                        block = fissionPortBlock;
+                    }
+                    else if (y == 1 && x == width - 1 && z == centerZ - 1 && centerZ > 1) {
+                        block = fissionPortBlock;
+                    }
+                    else if (y == 1 && x == width - 1 && z == centerZ && depth > 3) {
+                        block = fissionPortBlock;
+                    }
+                    else {
+                        block = reactorGlassBlock;
+                    }
+
+                    blocks.add(new StructureBlockInfo(pos, block, null));
+                }
+            }
+        }
+        return blocks;
+    }
+
+    // ============================================
+    // 7. Industrial Turbine
+    // ============================================
+
+    // Optimal rotor counts from efficiency chart
+    private static int getOptimalRotorCount(int width, int height) {
+        // Based on FTB wiki efficiency chart
+        if (width == 5 && height >= 9) return 4;
+        if (width == 7 && height >= 13) return 6;
+        if (width == 9 && height >= 17) return 8;
+        if (width == 11 && height >= 18) return 9;
+        if (width == 13 && height >= 18) return 9;
+        if (width == 15 && height >= 18) return 10;
+        if (width == 17 && height >= 18) return 10;
+
+        // Fallback calculation for non-standard sizes
+        int interiorWidth = width - 2;
+        int maxRotor = 2 * interiorWidth - 1;
+        return Math.min(maxRotor, height - 5); // Leave room for disperser, coils, condensers, top
+    }
+
+    // Coil count: 1 coil supports 4 blades, blades = rotors * 2
+    private static int getCoilCount(int rotorCount) {
+        int blades = rotorCount * 2;
+        return (blades + 3) / 4; // Ceiling division
+    }
+
+    private static NamedDefinition createIndustrialTurbine() {
+        List<MultiblockDefinition.SizeVariant> variants = List.of(
+            new MultiblockDefinition.SizeVariant(Component.literal("Small"), new BlockPos(5, 9, 5), true),
+            new MultiblockDefinition.SizeVariant(Component.literal("Small-Medium"), new BlockPos(7, 13, 7), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium"), new BlockPos(9, 17, 9), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Medium-Large"), new BlockPos(13, 18, 13), false),
+            new MultiblockDefinition.SizeVariant(Component.literal("Large"), new BlockPos(17, 18, 17), false)
+        );
+
+        MultiblockDefinition.StructureProvider provider = (variant, level) -> {
+            Vec3i size = new Vec3i(variant.dimensions().getX(), variant.dimensions().getY(), variant.dimensions().getZ());
+            return toMultiblockStructure(generateIndustrialTurbineStructure(size));
+        };
+
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("mekanism", "industrial_turbine"),
+            new MultiblockDefinition(
+                Component.literal("Industrial Turbine"),
+                "mekanism",
+                MultiblockCategory.POWER,
+                variants,
+                provider
+            )
+        );
+    }
+
+    private static List<StructureBlockInfo> generateIndustrialTurbineStructure(Vec3i size) {
+        List<StructureBlockInfo> blocks = new ArrayList<>();
+        int width = size.getX(), height = size.getY(), depth = size.getZ();
+        int centerX = width / 2, centerZ = depth / 2;
+
+        // Industrial Turbine rules (from wiki):
+        // - Square base, odd width 5-17, height up to 18
+        // - Edges: Turbine Casing only
+        // - Faces: Turbine Casing, Turbine Valve, or Structural Glass
+        // - Rotors: Single column in center, max length = 2 * interiorWidth - 1
+        // - Rotational Complex: On top of rotor column
+        // - Dispersers: Fill ENTIRE interior layer at Rotational Complex level (except center)
+        // - Vents: Replace casings at/above Rotational Complex layer, EXCEPT edges, exterior only
+        // - Coils: Directly above Rotational Complex, must be connected (vertical stack)
+        // - Condensers: Fill remaining interior above Rotational Complex layer
+
+        int rotorCount = getOptimalRotorCount(width, height);
+        int coilCount = getCoilCount(rotorCount);
+
+        // Y positions:
+        // y=0: Floor (casing)
+        // y=1 to y=rotorCount: Rotor column
+        // y=rotorCount+1: Rotational Complex + Dispersers
+        // y=rotorCount+2 to y=rotorCount+1+coilCount: Coils (center) + Condensers (rest)
+        // y=rotorCount+2+coilCount to y=height-2: More condensers
+        // y=height-1: Top (vents on non-edges)
+
+        int disperserY = rotorCount + 1;
+        int coilStartY = rotorCount + 2;
+        int coilEndY = coilStartY + coilCount - 1;
+
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int z = 0; z < depth; z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    BlockState block = null;
+
+                    boolean isOnEdge = isEdge(x, y, z, width, height, depth);
+                    boolean isInteriorBlock = isInterior(x, y, z, width, height, depth);
+                    boolean isOnFace = !isInteriorBlock && !isOnEdge;
+                    boolean isOnTop = (y == height - 1);
+                    boolean isOnBottom = (y == 0);
+                    boolean isCenter = (x == centerX && z == centerZ);
+
+                    // ===== INTERIOR BLOCKS =====
+                    if (isInteriorBlock) {
+                        if (isCenter) {
+                            // Center column
+                            if (y >= 1 && y <= rotorCount) {
+                                // Rotor shaft
+                                block = turbineRotorBlock;
+                            } else if (y == disperserY) {
+                                // Rotational Complex on top of rotor
+                                block = rotationalComplexBlock;
+                            } else if (y >= coilStartY && y <= coilEndY) {
+                                // Coils directly above Rotational Complex (vertical stack)
+                                block = electromagneticCoilBlock;
+                            }
+                            // Above coils at center: air or could be condenser
+                        } else {
+                            // Non-center interior positions
+                            if (y == disperserY) {
+                                // Dispersers fill entire interior layer at Rotational Complex level
+                                block = pressureDisperserBlock;
+                            } else if (y > disperserY && y < height - 1) {
+                                // Condensers fill remaining interior above disperser layer
+                                block = saturatingCondenserBlock;
+                            }
+                            // Below disperser layer (rotor area): air for blade clearance
+                        }
+
+                        if (block != null) {
+                            blocks.add(new StructureBlockInfo(pos, block, null));
+                        }
+                        continue;
+                    }
+
+                    // ===== EDGES (always Turbine Casing) =====
+                    if (isOnEdge) {
+                        block = turbineCasingBlock;
+                    }
+                    // ===== FACES (non-edge exterior) =====
+                    else if (isOnFace) {
+                        if (isOnBottom) {
+                            // Bottom face: casing
+                            block = turbineCasingBlock;
+                        } else if (isOnTop) {
+                            // Top face (non-edge): Vents
+                            block = turbineVentBlock;
+                        } else {
+                            // Side walls
+                            if (y >= disperserY) {
+                                // At and above Rotational Complex layer: Vents allowed
+                                block = turbineVentBlock;
+                            } else {
+                                // Below Rotational Complex layer: Casing, Valve, or Glass
+                                // Place valves for steam input (need minimum 2)
+                                if (y == 1 && z == 0 && x == centerX) {
+                                    block = turbineValveBlock;
+                                } else if (y == 1 && z == depth - 1 && x == centerX) {
+                                    block = turbineValveBlock;
+                                } else {
+                                    // Structural glass for visibility
+                                    block = structuralGlassBlock;
+                                }
+                            }
+                        }
+                    }
+
+                    if (block != null) {
+                        blocks.add(new StructureBlockInfo(pos, block, null));
+                    }
+                }
+            }
+        }
+        return blocks;
+    }
+
+    // ============================================
+    // 8. Fusion Reactor - Fixed Size
+    // ============================================
+
+    private static NamedDefinition createFusionReactor() {
+        BlockPos size = new BlockPos(5, 5, 5);
+
+        MultiblockDefinition.StructureProvider provider = (variant, level) ->
+            toMultiblockStructure(generateFusionReactorStructure());
+
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("mekanism", "fusion_reactor"),
+            MultiblockDefinition.fixed(
+                Component.literal("Fusion Reactor"),
+                "mekanism",
+                MultiblockCategory.POWER,
+                size,
+                provider
+            )
+        );
+    }
+
+    private static List<StructureBlockInfo> generateFusionReactorStructure() {
+        List<StructureBlockInfo> blocks = new ArrayList<>();
+
+        // Fusion Reactor is a fixed 5-layer structure
+        // Made of: 75 Frame, 2 Port, 1 Controller, 8 Glass, 1 Laser Focus Matrix
+        // Legend: F=Frame, P=Port, C=Controller, L=Laser Focus, G=Glass, .=air
+
+        // Layer 0 (bottom) - Solid plus shape of Frame (13 blocks)
+        int[][] layer0 = {
+            {0, 0, 1, 0, 0},
+            {0, 1, 1, 1, 0},
+            {1, 1, 1, 1, 1},
+            {0, 1, 1, 1, 0},
+            {0, 0, 1, 0, 0}
+        };
+        addFusionLayerSimple(blocks, 0, layer0, fusionFrameBlock);
+
+        // Layer 1 - Hollow square without corners, ALL Frame (12 blocks)
+        // Pattern:
+        //   . F F F .
+        //   F . . . F
+        //   F . . . F
+        //   F . . . F
+        //   . F F F .
+        int[][] layer1 = {
+            {0, 1, 1, 1, 0},
+            {1, 0, 0, 0, 1},
+            {1, 0, 0, 0, 1},
+            {1, 0, 0, 0, 1},
+            {0, 1, 1, 1, 0}
+        };
+        addFusionLayerSimple(blocks, 1, layer1, fusionFrameBlock);
+
+        // Layer 2 (middle) - Full square perimeter
+        // Ports on left/right (across from each other)
+        // Laser at front center with glass on all sides
+        // Back has T-shape glass to match front
+        // Pattern (looking from above, front=south/z=4):
+        //   F G G G F   <- Back (north), T-shape glass
+        //   G . . . G
+        //   P . . . P   <- Ports on left/right sides
+        //   G . . . G
+        //   F G L G F   <- Front (south), Laser in middle
+        int[][] layer2 = {
+            {1, 3, 3, 3, 1},
+            {3, 0, 0, 0, 3},
+            {2, 0, 0, 0, 2},
+            {3, 0, 0, 0, 3},
+            {1, 3, 4, 3, 1}
+        };
+        addFusionLayerWithTypes(blocks, 2, layer2);
+
+        // Layer 3 - Same as Layer 1, ALL Frame (12 blocks)
+        addFusionLayerSimple(blocks, 3, layer1, fusionFrameBlock);
+
+        // Layer 4 (top) - Solid plus shape with Controller in center (12 Frame + 1 Controller)
+        int[][] layer4 = {
+            {0, 0, 1, 0, 0},
+            {0, 1, 1, 1, 0},
+            {1, 1, 5, 1, 1},
+            {0, 1, 1, 1, 0},
+            {0, 0, 1, 0, 0}
+        };
+        addFusionLayerWithTypes(blocks, 4, layer4);
+
+        return blocks;
+    }
+
+    private static void addFusionLayerSimple(List<StructureBlockInfo> blocks, int y, int[][] pattern, BlockState block) {
+        for (int x = 0; x < 5; x++) {
+            for (int z = 0; z < 5; z++) {
+                if (pattern[z][x] == 1) {
                     blocks.add(new StructureBlockInfo(new BlockPos(x, y, z), block, null));
                 }
             }
         }
+    }
 
-        @Override
-        public float getManualScale() { return 0.8f; }
+    private static void addFusionLayerWithTypes(List<StructureBlockInfo> blocks, int y, int[][] pattern) {
+        // 0=air, 1=Frame, 2=Port, 3=Glass, 4=Laser Focus, 5=Controller
+        for (int x = 0; x < 5; x++) {
+            for (int z = 0; z < 5; z++) {
+                int val = pattern[z][x];
+                if (val == 0) continue;
 
-        @Override
-        public String getModId() { return "mekanism"; }
-
-        @Override
-        public String getCategory() { return "power"; }
+                BlockState block = switch (val) {
+                    case 1 -> fusionFrameBlock;
+                    case 2 -> fusionPortBlock;
+                    case 3 -> reactorGlassBlock;
+                    case 4 -> laserFocusMatrixBlock;
+                    case 5 -> fusionControllerBlock;
+                    default -> fusionFrameBlock;
+                };
+                blocks.add(new StructureBlockInfo(new BlockPos(x, y, z), block, null));
+            }
+        }
     }
 }
