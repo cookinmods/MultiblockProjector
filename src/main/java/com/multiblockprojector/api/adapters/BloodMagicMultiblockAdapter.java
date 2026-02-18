@@ -1,20 +1,19 @@
 package com.multiblockprojector.api.adapters;
 
 import com.multiblockprojector.UniversalProjector;
-import com.multiblockprojector.api.ICyclingBlockMultiblock;
-import com.multiblockprojector.api.IUniversalMultiblock;
-import com.multiblockprojector.api.UniversalMultiblockHandler;
+import com.multiblockprojector.api.BlockEntry;
+import com.multiblockprojector.api.BlockGroup;
+import com.multiblockprojector.api.MultiblockCategory;
+import com.multiblockprojector.api.MultiblockDefinition;
+import com.multiblockprojector.api.MultiblockStructure;
+import com.multiblockprojector.api.SingleBlock;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Vec3i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 
-import javax.annotation.Nonnull;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -22,9 +21,20 @@ import java.util.*;
 /**
  * Adapter for Blood Magic altar tiers with cycling rune support.
  * Blood Magic uses a tiered altar system with runes, pillars, and capstones.
- * Rune positions can accept any type of rune, which cycle in the preview.
+ * Rune positions use {@link BlockGroup} entries so the preview cycles through
+ * all acceptable rune types for each tier.
  */
 public class BloodMagicMultiblockAdapter {
+
+    /**
+     * A named definition pairing a registry ID with its definition.
+     */
+    public record NamedDefinition(ResourceLocation id, MultiblockDefinition definition) {}
+
+    private static final MultiblockCategory ALTAR_CATEGORY = new MultiblockCategory(
+        ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar"),
+        Component.literal("Altar")
+    );
 
     // Block states loaded via reflection from Blood Magic
     private static BlockState bloodAltarBlock;
@@ -159,25 +169,6 @@ public class BloodMagicMultiblockAdapter {
         }
     }
 
-    /**
-     * Register all Blood Magic altar tiers
-     */
-    public static void registerAllMultiblocks() {
-        loadBlocks();
-
-        UniversalProjector.LOGGER.info("Registering Blood Magic altar tiers...");
-
-        // Register all 6 altar tiers
-        UniversalMultiblockHandler.registerMultiblock(new AltarTier1Multiblock());
-        UniversalMultiblockHandler.registerMultiblock(new AltarTier2Multiblock());
-        UniversalMultiblockHandler.registerMultiblock(new AltarTier3Multiblock());
-        UniversalMultiblockHandler.registerMultiblock(new AltarTier4Multiblock());
-        UniversalMultiblockHandler.registerMultiblock(new AltarTier5Multiblock());
-        UniversalMultiblockHandler.registerMultiblock(new AltarTier6Multiblock());
-
-        UniversalProjector.LOGGER.info("Registered 6 Blood Magic altar tiers");
-    }
-
     // Helper methods to get the effective block states
     private static BlockState getAltarBlock() {
         return bloodAltarBlock != null ? bloodAltarBlock : FALLBACK_ALTAR;
@@ -220,590 +211,491 @@ public class BloodMagicMultiblockAdapter {
         }
     }
 
-    // ============================================
-    // Base class for altar tiers with cycling support
-    // ============================================
-    private static abstract class BaseAltarMultiblock implements ICyclingBlockMultiblock {
-        protected final Set<BlockPos> runePositions = new HashSet<>();
-        protected final int tier;
+    /**
+     * Discover all Blood Magic altar tiers and return them as named definitions.
+     *
+     * @return list of discovered Blood Magic multiblock definitions
+     */
+    public static List<NamedDefinition> discover() {
+        List<NamedDefinition> results = new ArrayList<>();
+        try {
+            loadBlocks();
 
-        protected BaseAltarMultiblock(int tier) {
-            this.tier = tier;
+            results.add(createTier1());
+            results.add(createTier2());
+            results.add(createTier3());
+            results.add(createTier4());
+            results.add(createTier5());
+            results.add(createTier6());
+
+            UniversalProjector.LOGGER.info("Discovered 6 Blood Magic altar tiers");
+        } catch (Exception e) {
+            UniversalProjector.LOGGER.error("Failed to discover Blood Magic multiblocks", e);
         }
-
-        @Override
-        public List<BlockState> getAcceptableBlocks(BlockPos structurePos) {
-            if (runePositions.contains(structurePos)) {
-                return getRunesForTier(tier);
-            }
-            return List.of();
-        }
-
-        @Override
-        public boolean hasCyclingBlocks(BlockPos structurePos) {
-            return runePositions.contains(structurePos);
-        }
-
-        @Override
-        public BlockState getDefaultBlock(BlockPos structurePos) {
-            if (runePositions.contains(structurePos)) {
-                return getRuneBlock(); // Blank rune for creative auto-build
-            }
-            // For non-rune positions, return null to indicate use normal block
-            return null;
-        }
-
-        @Override
-        public String getModId() { return "bloodmagic"; }
-
-        @Override
-        public String getCategory() { return "altar"; }
-
-        protected void addRunePosition(BlockPos pos) {
-            runePositions.add(pos.immutable());
-        }
+        return results;
     }
 
     // ============================================
-    // Tier 1: Weak - Just the Blood Altar (no cycling)
+    // Tier 1: Weak - Just the Blood Altar (no runes)
     // ============================================
-    private static class AltarTier1Multiblock implements IUniversalMultiblock {
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_1");
-        }
-
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Blood Altar - Tier 1 (Weak)");
-        }
-
-        @Override
-        public Vec3i getSize(@Nonnull Level world) {
-            return new Vec3i(1, 1, 1);
-        }
-
-        @Override
-        public List<StructureBlockInfo> getStructure(@Nonnull Level world) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            blocks.add(new StructureBlockInfo(BlockPos.ZERO, getAltarBlock(), null));
-            return blocks;
-        }
-
-        @Override
-        public float getManualScale() { return 2.0f; }
-
-        @Override
-        public String getModId() { return "bloodmagic"; }
-
-        @Override
-        public String getCategory() { return "altar"; }
+    private static NamedDefinition createTier1() {
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_1"),
+            MultiblockDefinition.fixed(
+                Component.literal("Blood Altar - Tier 1 (Weak)"),
+                "bloodmagic",
+                ALTAR_CATEGORY,
+                new BlockPos(1, 1, 1),
+                (variant, level) -> {
+                    Map<BlockPos, BlockEntry> blockMap = new LinkedHashMap<>();
+                    blockMap.put(BlockPos.ZERO, new SingleBlock(getAltarBlock()));
+                    return new MultiblockStructure(blockMap);
+                }
+            )
+        );
     }
 
     // ============================================
     // Tier 2: Apprentice - Altar + 8 runes in 3x3 below
     // ============================================
-    private static class AltarTier2Multiblock extends BaseAltarMultiblock {
-        public AltarTier2Multiblock() {
-            super(2);
-        }
+    private static NamedDefinition createTier2() {
+        int tier = 2;
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_2"),
+            MultiblockDefinition.fixed(
+                Component.literal("Blood Altar - Tier 2 (Apprentice)"),
+                "bloodmagic",
+                ALTAR_CATEGORY,
+                new BlockPos(3, 2, 3),
+                (variant, level) -> {
+                    Map<BlockPos, BlockEntry> blockMap = new LinkedHashMap<>();
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_2");
-        }
+                    // Altar at center, y=1
+                    blockMap.put(new BlockPos(1, 1, 1), new SingleBlock(getAltarBlock()));
 
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Blood Altar - Tier 2 (Apprentice)");
-        }
+                    // 8 runes in 3x3 pattern below altar (y=0), excluding center
+                    for (int x = 0; x < 3; x++) {
+                        for (int z = 0; z < 3; z++) {
+                            if (x == 1 && z == 1) continue; // Skip center (below altar)
+                            blockMap.put(new BlockPos(x, 0, z), new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-        @Override
-        public Vec3i getSize(@Nonnull Level world) {
-            return new Vec3i(3, 2, 3);
-        }
-
-        @Override
-        public List<StructureBlockInfo> getStructure(@Nonnull Level world) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            runePositions.clear();
-
-            // Altar at center, y=1
-            blocks.add(new StructureBlockInfo(new BlockPos(1, 1, 1), getAltarBlock(), null));
-
-            // 8 runes in 3x3 pattern below altar (y=0), excluding center
-            for (int x = 0; x < 3; x++) {
-                for (int z = 0; z < 3; z++) {
-                    if (x == 1 && z == 1) continue; // Skip center (below altar)
-                    BlockPos pos = new BlockPos(x, 0, z);
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
+                    return new MultiblockStructure(blockMap);
                 }
-            }
-
-            return blocks;
-        }
-
-        @Override
-        public float getManualScale() { return 1.5f; }
+            )
+        );
     }
 
     // ============================================
     // Tier 3: Mage - Larger rune ring + 4 pillars with glowstone caps
     // ============================================
-    private static class AltarTier3Multiblock extends BaseAltarMultiblock {
-        public AltarTier3Multiblock() {
-            super(3);
-        }
+    private static NamedDefinition createTier3() {
+        int tier = 3;
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_3"),
+            MultiblockDefinition.fixed(
+                Component.literal("Blood Altar - Tier 3 (Mage)"),
+                "bloodmagic",
+                ALTAR_CATEGORY,
+                new BlockPos(7, 4, 7),
+                (variant, level) -> {
+                    Map<BlockPos, BlockEntry> blockMap = new LinkedHashMap<>();
+                    int centerX = 3, centerZ = 3, altarY = 2;
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_3");
-        }
+                    // Altar at center
+                    blockMap.put(new BlockPos(centerX, altarY, centerZ), new SingleBlock(getAltarBlock()));
 
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Blood Altar - Tier 3 (Mage)");
-        }
+                    // 3x3 runes below altar (y=1)
+                    for (int dx = -1; dx <= 1; dx++) {
+                        for (int dz = -1; dz <= 1; dz++) {
+                            if (dx == 0 && dz == 0) continue;
+                            blockMap.put(new BlockPos(centerX + dx, altarY - 1, centerZ + dz), new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-        @Override
-        public Vec3i getSize(@Nonnull Level world) {
-            return new Vec3i(7, 4, 7);
-        }
+                    // Outer rune ring at y=0, distance 3
+                    for (int i = -2; i <= 2; i++) {
+                        BlockPos[] positions = {
+                            new BlockPos(centerX + i, altarY - 2, centerZ + 3),
+                            new BlockPos(centerX + i, altarY - 2, centerZ - 3),
+                            new BlockPos(centerX + 3, altarY - 2, centerZ + i),
+                            new BlockPos(centerX - 3, altarY - 2, centerZ + i)
+                        };
+                        for (BlockPos pos : positions) {
+                            blockMap.put(pos, new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-        @Override
-        public List<StructureBlockInfo> getStructure(@Nonnull Level world) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            runePositions.clear();
-            int centerX = 3, centerZ = 3, altarY = 2;
+                    // 4 pillars at corners with glowstone caps
+                    int[][] pillarPositions = {{3, 3}, {3, -3}, {-3, 3}, {-3, -3}};
+                    for (int[] pos : pillarPositions) {
+                        for (int dy = -1; dy <= 0; dy++) {
+                            blockMap.put(new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
+                                new SingleBlock(getPillarBlock()));
+                        }
+                        // Glowstone cap on top
+                        blockMap.put(new BlockPos(centerX + pos[0], altarY + 1, centerZ + pos[1]),
+                            new SingleBlock(getT3Capstone()));
+                    }
 
-            // Altar at center
-            blocks.add(new StructureBlockInfo(new BlockPos(centerX, altarY, centerZ), getAltarBlock(), null));
-
-            // 3x3 runes below altar (y=1)
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    if (dx == 0 && dz == 0) continue;
-                    BlockPos pos = new BlockPos(centerX + dx, altarY - 1, centerZ + dz);
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
+                    return new MultiblockStructure(blockMap);
                 }
-            }
-
-            // Outer rune ring at y=0, distance 3
-            for (int i = -2; i <= 2; i++) {
-                BlockPos[] positions = {
-                    new BlockPos(centerX + i, altarY - 2, centerZ + 3),
-                    new BlockPos(centerX + i, altarY - 2, centerZ - 3),
-                    new BlockPos(centerX + 3, altarY - 2, centerZ + i),
-                    new BlockPos(centerX - 3, altarY - 2, centerZ + i)
-                };
-                for (BlockPos pos : positions) {
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
-                }
-            }
-
-            // 4 pillars at corners with glowstone caps
-            int[][] pillarPositions = {{3, 3}, {3, -3}, {-3, 3}, {-3, -3}};
-            for (int[] pos : pillarPositions) {
-                for (int dy = -1; dy <= 0; dy++) {
-                    blocks.add(new StructureBlockInfo(
-                        new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
-                        getPillarBlock(), null));
-                }
-                // Glowstone cap on top
-                blocks.add(new StructureBlockInfo(
-                    new BlockPos(centerX + pos[0], altarY + 1, centerZ + pos[1]),
-                    getT3Capstone(), null));
-            }
-
-            return blocks;
-        }
-
-        @Override
-        public float getManualScale() { return 0.7f; }
+            )
+        );
     }
 
     // ============================================
     // Tier 4: Master - Even larger with outer pillars
     // ============================================
-    private static class AltarTier4Multiblock extends BaseAltarMultiblock {
-        public AltarTier4Multiblock() {
-            super(4);
-        }
+    private static NamedDefinition createTier4() {
+        int tier = 4;
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_4"),
+            MultiblockDefinition.fixed(
+                Component.literal("Blood Altar - Tier 4 (Master)"),
+                "bloodmagic",
+                ALTAR_CATEGORY,
+                new BlockPos(11, 6, 11),
+                (variant, level) -> {
+                    Map<BlockPos, BlockEntry> blockMap = new LinkedHashMap<>();
+                    int centerX = 5, centerZ = 5, altarY = 3;
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_4");
-        }
+                    // Altar at center
+                    blockMap.put(new BlockPos(centerX, altarY, centerZ), new SingleBlock(getAltarBlock()));
 
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Blood Altar - Tier 4 (Master)");
-        }
+                    // Tier 2 runes (3x3 below altar)
+                    for (int dx = -1; dx <= 1; dx++) {
+                        for (int dz = -1; dz <= 1; dz++) {
+                            if (dx == 0 && dz == 0) continue;
+                            blockMap.put(new BlockPos(centerX + dx, altarY - 1, centerZ + dz), new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-        @Override
-        public Vec3i getSize(@Nonnull Level world) {
-            return new Vec3i(11, 6, 11);
-        }
+                    // Tier 3 outer rune ring at distance 3
+                    for (int i = -2; i <= 2; i++) {
+                        BlockPos[] positions = {
+                            new BlockPos(centerX + i, altarY - 2, centerZ + 3),
+                            new BlockPos(centerX + i, altarY - 2, centerZ - 3),
+                            new BlockPos(centerX + 3, altarY - 2, centerZ + i),
+                            new BlockPos(centerX - 3, altarY - 2, centerZ + i)
+                        };
+                        for (BlockPos pos : positions) {
+                            blockMap.put(pos, new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-        @Override
-        public List<StructureBlockInfo> getStructure(@Nonnull Level world) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            runePositions.clear();
-            int centerX = 5, centerZ = 5, altarY = 3;
+                    // Tier 3 inner pillars with glowstone
+                    int[][] innerPillars = {{3, 3}, {3, -3}, {-3, 3}, {-3, -3}};
+                    for (int[] pos : innerPillars) {
+                        for (int dy = -1; dy <= 0; dy++) {
+                            blockMap.put(new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
+                                new SingleBlock(getPillarBlock()));
+                        }
+                        blockMap.put(new BlockPos(centerX + pos[0], altarY + 1, centerZ + pos[1]),
+                            new SingleBlock(getT3Capstone()));
+                    }
 
-            // Altar at center
-            blocks.add(new StructureBlockInfo(new BlockPos(centerX, altarY, centerZ), getAltarBlock(), null));
+                    // Tier 4 outer rune ring at distance 5
+                    for (int i = -3; i <= 3; i++) {
+                        BlockPos[] positions = {
+                            new BlockPos(centerX + i, altarY - 3, centerZ + 5),
+                            new BlockPos(centerX + i, altarY - 3, centerZ - 5),
+                            new BlockPos(centerX + 5, altarY - 3, centerZ + i),
+                            new BlockPos(centerX - 5, altarY - 3, centerZ + i)
+                        };
+                        for (BlockPos pos : positions) {
+                            blockMap.put(pos, new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-            // Tier 2 runes (3x3 below altar)
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    if (dx == 0 && dz == 0) continue;
-                    BlockPos pos = new BlockPos(centerX + dx, altarY - 1, centerZ + dz);
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
+                    // Tier 4 outer pillars at distance 5
+                    int[][] outerPillars = {{5, 5}, {5, -5}, {-5, 5}, {-5, -5}};
+                    for (int[] pos : outerPillars) {
+                        for (int dy = -2; dy <= 1; dy++) {
+                            blockMap.put(new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
+                                new SingleBlock(getPillarBlock()));
+                        }
+                        // Bloodstone cap
+                        blockMap.put(new BlockPos(centerX + pos[0], altarY + 2, centerZ + pos[1]),
+                            new SingleBlock(getT4Capstone()));
+                    }
+
+                    return new MultiblockStructure(blockMap);
                 }
-            }
-
-            // Tier 3 outer rune ring at distance 3
-            for (int i = -2; i <= 2; i++) {
-                BlockPos[] positions = {
-                    new BlockPos(centerX + i, altarY - 2, centerZ + 3),
-                    new BlockPos(centerX + i, altarY - 2, centerZ - 3),
-                    new BlockPos(centerX + 3, altarY - 2, centerZ + i),
-                    new BlockPos(centerX - 3, altarY - 2, centerZ + i)
-                };
-                for (BlockPos pos : positions) {
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
-                }
-            }
-
-            // Tier 3 inner pillars with glowstone
-            int[][] innerPillars = {{3, 3}, {3, -3}, {-3, 3}, {-3, -3}};
-            for (int[] pos : innerPillars) {
-                for (int dy = -1; dy <= 0; dy++) {
-                    blocks.add(new StructureBlockInfo(
-                        new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
-                        getPillarBlock(), null));
-                }
-                blocks.add(new StructureBlockInfo(
-                    new BlockPos(centerX + pos[0], altarY + 1, centerZ + pos[1]),
-                    getT3Capstone(), null));
-            }
-
-            // Tier 4 outer rune ring at distance 5
-            for (int i = -3; i <= 3; i++) {
-                BlockPos[] positions = {
-                    new BlockPos(centerX + i, altarY - 3, centerZ + 5),
-                    new BlockPos(centerX + i, altarY - 3, centerZ - 5),
-                    new BlockPos(centerX + 5, altarY - 3, centerZ + i),
-                    new BlockPos(centerX - 5, altarY - 3, centerZ + i)
-                };
-                for (BlockPos pos : positions) {
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
-                }
-            }
-
-            // Tier 4 outer pillars at distance 5
-            int[][] outerPillars = {{5, 5}, {5, -5}, {-5, 5}, {-5, -5}};
-            for (int[] pos : outerPillars) {
-                for (int dy = -2; dy <= 1; dy++) {
-                    blocks.add(new StructureBlockInfo(
-                        new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
-                        getPillarBlock(), null));
-                }
-                // Bloodstone cap
-                blocks.add(new StructureBlockInfo(
-                    new BlockPos(centerX + pos[0], altarY + 2, centerZ + pos[1]),
-                    getT4Capstone(), null));
-            }
-
-            return blocks;
-        }
-
-        @Override
-        public float getManualScale() { return 0.5f; }
+            )
+        );
     }
 
     // ============================================
     // Tier 5: Archmage - Large ring with hellforged caps
     // ============================================
-    private static class AltarTier5Multiblock extends BaseAltarMultiblock {
-        public AltarTier5Multiblock() {
-            super(5);
-        }
+    private static NamedDefinition createTier5() {
+        int tier = 5;
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_5"),
+            MultiblockDefinition.fixed(
+                Component.literal("Blood Altar - Tier 5 (Archmage)"),
+                "bloodmagic",
+                ALTAR_CATEGORY,
+                new BlockPos(17, 7, 17),
+                (variant, level) -> {
+                    Map<BlockPos, BlockEntry> blockMap = new LinkedHashMap<>();
+                    int centerX = 8, centerZ = 8, altarY = 4;
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_5");
-        }
+                    // Altar at center
+                    blockMap.put(new BlockPos(centerX, altarY, centerZ), new SingleBlock(getAltarBlock()));
 
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Blood Altar - Tier 5 (Archmage)");
-        }
+                    // Tier 2 runes (3x3 below altar)
+                    for (int dx = -1; dx <= 1; dx++) {
+                        for (int dz = -1; dz <= 1; dz++) {
+                            if (dx == 0 && dz == 0) continue;
+                            blockMap.put(new BlockPos(centerX + dx, altarY - 1, centerZ + dz), new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-        @Override
-        public Vec3i getSize(@Nonnull Level world) {
-            return new Vec3i(17, 7, 17);
-        }
+                    // Tier 3 rune ring at distance 3
+                    for (int i = -2; i <= 2; i++) {
+                        BlockPos[] positions = {
+                            new BlockPos(centerX + i, altarY - 2, centerZ + 3),
+                            new BlockPos(centerX + i, altarY - 2, centerZ - 3),
+                            new BlockPos(centerX + 3, altarY - 2, centerZ + i),
+                            new BlockPos(centerX - 3, altarY - 2, centerZ + i)
+                        };
+                        for (BlockPos pos : positions) {
+                            blockMap.put(pos, new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-        @Override
-        public List<StructureBlockInfo> getStructure(@Nonnull Level world) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            runePositions.clear();
-            int centerX = 8, centerZ = 8, altarY = 4;
+                    // Tier 3 pillars with glowstone
+                    int[][] tier3Pillars = {{3, 3}, {3, -3}, {-3, 3}, {-3, -3}};
+                    for (int[] pos : tier3Pillars) {
+                        for (int dy = -1; dy <= 0; dy++) {
+                            blockMap.put(new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
+                                new SingleBlock(getPillarBlock()));
+                        }
+                        blockMap.put(new BlockPos(centerX + pos[0], altarY + 1, centerZ + pos[1]),
+                            new SingleBlock(getT3Capstone()));
+                    }
 
-            // Altar at center
-            blocks.add(new StructureBlockInfo(new BlockPos(centerX, altarY, centerZ), getAltarBlock(), null));
+                    // Tier 4 rune ring at distance 5
+                    for (int i = -3; i <= 3; i++) {
+                        BlockPos[] positions = {
+                            new BlockPos(centerX + i, altarY - 3, centerZ + 5),
+                            new BlockPos(centerX + i, altarY - 3, centerZ - 5),
+                            new BlockPos(centerX + 5, altarY - 3, centerZ + i),
+                            new BlockPos(centerX - 5, altarY - 3, centerZ + i)
+                        };
+                        for (BlockPos pos : positions) {
+                            blockMap.put(pos, new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-            // Tier 2 runes (3x3 below altar)
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    if (dx == 0 && dz == 0) continue;
-                    BlockPos pos = new BlockPos(centerX + dx, altarY - 1, centerZ + dz);
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
+                    // Tier 4 pillars with bloodstone
+                    int[][] tier4Pillars = {{5, 5}, {5, -5}, {-5, 5}, {-5, -5}};
+                    for (int[] pos : tier4Pillars) {
+                        for (int dy = -2; dy <= 1; dy++) {
+                            blockMap.put(new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
+                                new SingleBlock(getPillarBlock()));
+                        }
+                        blockMap.put(new BlockPos(centerX + pos[0], altarY + 2, centerZ + pos[1]),
+                            new SingleBlock(getT4Capstone()));
+                    }
+
+                    // Tier 5 rune ring at distance 8
+                    for (int i = -6; i <= 6; i++) {
+                        BlockPos[] positions = {
+                            new BlockPos(centerX + i, altarY - 4, centerZ + 8),
+                            new BlockPos(centerX + i, altarY - 4, centerZ - 8),
+                            new BlockPos(centerX + 8, altarY - 4, centerZ + i),
+                            new BlockPos(centerX - 8, altarY - 4, centerZ + i)
+                        };
+                        for (BlockPos pos : positions) {
+                            blockMap.put(pos, new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
+
+                    // Tier 5 corner capstones (hellforged)
+                    int[][] tier5Caps = {{8, 8}, {8, -8}, {-8, 8}, {-8, -8}};
+                    for (int[] pos : tier5Caps) {
+                        blockMap.put(new BlockPos(centerX + pos[0], altarY - 4, centerZ + pos[1]),
+                            new SingleBlock(getT5Capstone()));
+                    }
+
+                    return new MultiblockStructure(blockMap);
                 }
-            }
-
-            // Tier 3 rune ring at distance 3
-            for (int i = -2; i <= 2; i++) {
-                BlockPos[] positions = {
-                    new BlockPos(centerX + i, altarY - 2, centerZ + 3),
-                    new BlockPos(centerX + i, altarY - 2, centerZ - 3),
-                    new BlockPos(centerX + 3, altarY - 2, centerZ + i),
-                    new BlockPos(centerX - 3, altarY - 2, centerZ + i)
-                };
-                for (BlockPos pos : positions) {
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
-                }
-            }
-
-            // Tier 3 pillars with glowstone
-            int[][] tier3Pillars = {{3, 3}, {3, -3}, {-3, 3}, {-3, -3}};
-            for (int[] pos : tier3Pillars) {
-                for (int dy = -1; dy <= 0; dy++) {
-                    blocks.add(new StructureBlockInfo(
-                        new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
-                        getPillarBlock(), null));
-                }
-                blocks.add(new StructureBlockInfo(
-                    new BlockPos(centerX + pos[0], altarY + 1, centerZ + pos[1]),
-                    getT3Capstone(), null));
-            }
-
-            // Tier 4 rune ring at distance 5
-            for (int i = -3; i <= 3; i++) {
-                BlockPos[] positions = {
-                    new BlockPos(centerX + i, altarY - 3, centerZ + 5),
-                    new BlockPos(centerX + i, altarY - 3, centerZ - 5),
-                    new BlockPos(centerX + 5, altarY - 3, centerZ + i),
-                    new BlockPos(centerX - 5, altarY - 3, centerZ + i)
-                };
-                for (BlockPos pos : positions) {
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
-                }
-            }
-
-            // Tier 4 pillars with bloodstone
-            int[][] tier4Pillars = {{5, 5}, {5, -5}, {-5, 5}, {-5, -5}};
-            for (int[] pos : tier4Pillars) {
-                for (int dy = -2; dy <= 1; dy++) {
-                    blocks.add(new StructureBlockInfo(
-                        new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
-                        getPillarBlock(), null));
-                }
-                blocks.add(new StructureBlockInfo(
-                    new BlockPos(centerX + pos[0], altarY + 2, centerZ + pos[1]),
-                    getT4Capstone(), null));
-            }
-
-            // Tier 5 rune ring at distance 8
-            for (int i = -6; i <= 6; i++) {
-                BlockPos[] positions = {
-                    new BlockPos(centerX + i, altarY - 4, centerZ + 8),
-                    new BlockPos(centerX + i, altarY - 4, centerZ - 8),
-                    new BlockPos(centerX + 8, altarY - 4, centerZ + i),
-                    new BlockPos(centerX - 8, altarY - 4, centerZ + i)
-                };
-                for (BlockPos pos : positions) {
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
-                }
-            }
-
-            // Tier 5 corner capstones (hellforged)
-            int[][] tier5Caps = {{8, 8}, {8, -8}, {-8, 8}, {-8, -8}};
-            for (int[] pos : tier5Caps) {
-                blocks.add(new StructureBlockInfo(
-                    new BlockPos(centerX + pos[0], altarY - 4, centerZ + pos[1]),
-                    getT5Capstone(), null));
-            }
-
-            return blocks;
-        }
-
-        @Override
-        public float getManualScale() { return 0.35f; }
+            )
+        );
     }
 
     // ============================================
     // Tier 6: Transcendent - Largest altar with crystal caps
     // ============================================
-    private static class AltarTier6Multiblock extends BaseAltarMultiblock {
-        public AltarTier6Multiblock() {
-            super(6);
-        }
+    private static NamedDefinition createTier6() {
+        int tier = 6;
+        return new NamedDefinition(
+            ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_6"),
+            MultiblockDefinition.fixed(
+                Component.literal("Blood Altar - Tier 6 (Transcendent)"),
+                "bloodmagic",
+                ALTAR_CATEGORY,
+                new BlockPos(23, 9, 23),
+                (variant, level) -> {
+                    Map<BlockPos, BlockEntry> blockMap = new LinkedHashMap<>();
+                    int centerX = 11, centerZ = 11, altarY = 5;
 
-        @Override
-        public ResourceLocation getUniqueName() {
-            return ResourceLocation.fromNamespaceAndPath("bloodmagic", "altar_tier_6");
-        }
+                    // Altar at center
+                    blockMap.put(new BlockPos(centerX, altarY, centerZ), new SingleBlock(getAltarBlock()));
 
-        @Override
-        public Component getDisplayName() {
-            return Component.literal("Blood Altar - Tier 6 (Transcendent)");
-        }
+                    // Tier 2 runes (3x3 below altar)
+                    for (int dx = -1; dx <= 1; dx++) {
+                        for (int dz = -1; dz <= 1; dz++) {
+                            if (dx == 0 && dz == 0) continue;
+                            blockMap.put(new BlockPos(centerX + dx, altarY - 1, centerZ + dz), new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-        @Override
-        public Vec3i getSize(@Nonnull Level world) {
-            return new Vec3i(23, 9, 23);
-        }
+                    // Tier 3 rune ring at distance 3
+                    for (int i = -2; i <= 2; i++) {
+                        BlockPos[] positions = {
+                            new BlockPos(centerX + i, altarY - 2, centerZ + 3),
+                            new BlockPos(centerX + i, altarY - 2, centerZ - 3),
+                            new BlockPos(centerX + 3, altarY - 2, centerZ + i),
+                            new BlockPos(centerX - 3, altarY - 2, centerZ + i)
+                        };
+                        for (BlockPos pos : positions) {
+                            blockMap.put(pos, new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-        @Override
-        public List<StructureBlockInfo> getStructure(@Nonnull Level world) {
-            List<StructureBlockInfo> blocks = new ArrayList<>();
-            runePositions.clear();
-            int centerX = 11, centerZ = 11, altarY = 5;
+                    // Tier 3 pillars with glowstone
+                    int[][] tier3Pillars = {{3, 3}, {3, -3}, {-3, 3}, {-3, -3}};
+                    for (int[] pos : tier3Pillars) {
+                        for (int dy = -1; dy <= 0; dy++) {
+                            blockMap.put(new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
+                                new SingleBlock(getPillarBlock()));
+                        }
+                        blockMap.put(new BlockPos(centerX + pos[0], altarY + 1, centerZ + pos[1]),
+                            new SingleBlock(getT3Capstone()));
+                    }
 
-            // Altar at center
-            blocks.add(new StructureBlockInfo(new BlockPos(centerX, altarY, centerZ), getAltarBlock(), null));
+                    // Tier 4 rune ring at distance 5
+                    for (int i = -3; i <= 3; i++) {
+                        BlockPos[] positions = {
+                            new BlockPos(centerX + i, altarY - 3, centerZ + 5),
+                            new BlockPos(centerX + i, altarY - 3, centerZ - 5),
+                            new BlockPos(centerX + 5, altarY - 3, centerZ + i),
+                            new BlockPos(centerX - 5, altarY - 3, centerZ + i)
+                        };
+                        for (BlockPos pos : positions) {
+                            blockMap.put(pos, new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
 
-            // Tier 2 runes (3x3 below altar)
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    if (dx == 0 && dz == 0) continue;
-                    BlockPos pos = new BlockPos(centerX + dx, altarY - 1, centerZ + dz);
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
+                    // Tier 4 pillars with bloodstone
+                    int[][] tier4Pillars = {{5, 5}, {5, -5}, {-5, 5}, {-5, -5}};
+                    for (int[] pos : tier4Pillars) {
+                        for (int dy = -2; dy <= 1; dy++) {
+                            blockMap.put(new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
+                                new SingleBlock(getPillarBlock()));
+                        }
+                        blockMap.put(new BlockPos(centerX + pos[0], altarY + 2, centerZ + pos[1]),
+                            new SingleBlock(getT4Capstone()));
+                    }
+
+                    // Tier 5 rune ring at distance 8
+                    for (int i = -6; i <= 6; i++) {
+                        BlockPos[] positions = {
+                            new BlockPos(centerX + i, altarY - 4, centerZ + 8),
+                            new BlockPos(centerX + i, altarY - 4, centerZ - 8),
+                            new BlockPos(centerX + 8, altarY - 4, centerZ + i),
+                            new BlockPos(centerX - 8, altarY - 4, centerZ + i)
+                        };
+                        for (BlockPos pos : positions) {
+                            blockMap.put(pos, new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
+
+                    // Tier 5 corner capstones (hellforged)
+                    int[][] tier5Caps = {{8, 8}, {8, -8}, {-8, 8}, {-8, -8}};
+                    for (int[] pos : tier5Caps) {
+                        blockMap.put(new BlockPos(centerX + pos[0], altarY - 4, centerZ + pos[1]),
+                            new SingleBlock(getT5Capstone()));
+                    }
+
+                    // Tier 6 rune ring at distance 11
+                    for (int i = -9; i <= 9; i++) {
+                        BlockPos[] positions = {
+                            new BlockPos(centerX + i, altarY - 5, centerZ + 11),
+                            new BlockPos(centerX + i, altarY - 5, centerZ - 11),
+                            new BlockPos(centerX + 11, altarY - 5, centerZ + i),
+                            new BlockPos(centerX - 11, altarY - 5, centerZ + i)
+                        };
+                        for (BlockPos pos : positions) {
+                            blockMap.put(pos, new BlockGroup(
+                                Component.literal("Any Rune"),
+                                getRunesForTier(tier)
+                            ));
+                        }
+                    }
+
+                    // Tier 6 tall pillars at distance 11
+                    int[][] tier6Pillars = {{11, 11}, {11, -11}, {-11, 11}, {-11, -11}};
+                    for (int[] pos : tier6Pillars) {
+                        for (int dy = -4; dy <= 2; dy++) {
+                            blockMap.put(new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
+                                new SingleBlock(getPillarBlock()));
+                        }
+                        // Crystal cluster cap on top
+                        blockMap.put(new BlockPos(centerX + pos[0], altarY + 3, centerZ + pos[1]),
+                            new SingleBlock(getT6Capstone()));
+                    }
+
+                    return new MultiblockStructure(blockMap);
                 }
-            }
-
-            // Tier 3 rune ring at distance 3
-            for (int i = -2; i <= 2; i++) {
-                BlockPos[] positions = {
-                    new BlockPos(centerX + i, altarY - 2, centerZ + 3),
-                    new BlockPos(centerX + i, altarY - 2, centerZ - 3),
-                    new BlockPos(centerX + 3, altarY - 2, centerZ + i),
-                    new BlockPos(centerX - 3, altarY - 2, centerZ + i)
-                };
-                for (BlockPos pos : positions) {
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
-                }
-            }
-
-            // Tier 3 pillars with glowstone
-            int[][] tier3Pillars = {{3, 3}, {3, -3}, {-3, 3}, {-3, -3}};
-            for (int[] pos : tier3Pillars) {
-                for (int dy = -1; dy <= 0; dy++) {
-                    blocks.add(new StructureBlockInfo(
-                        new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
-                        getPillarBlock(), null));
-                }
-                blocks.add(new StructureBlockInfo(
-                    new BlockPos(centerX + pos[0], altarY + 1, centerZ + pos[1]),
-                    getT3Capstone(), null));
-            }
-
-            // Tier 4 rune ring at distance 5
-            for (int i = -3; i <= 3; i++) {
-                BlockPos[] positions = {
-                    new BlockPos(centerX + i, altarY - 3, centerZ + 5),
-                    new BlockPos(centerX + i, altarY - 3, centerZ - 5),
-                    new BlockPos(centerX + 5, altarY - 3, centerZ + i),
-                    new BlockPos(centerX - 5, altarY - 3, centerZ + i)
-                };
-                for (BlockPos pos : positions) {
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
-                }
-            }
-
-            // Tier 4 pillars with bloodstone
-            int[][] tier4Pillars = {{5, 5}, {5, -5}, {-5, 5}, {-5, -5}};
-            for (int[] pos : tier4Pillars) {
-                for (int dy = -2; dy <= 1; dy++) {
-                    blocks.add(new StructureBlockInfo(
-                        new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
-                        getPillarBlock(), null));
-                }
-                blocks.add(new StructureBlockInfo(
-                    new BlockPos(centerX + pos[0], altarY + 2, centerZ + pos[1]),
-                    getT4Capstone(), null));
-            }
-
-            // Tier 5 rune ring at distance 8
-            for (int i = -6; i <= 6; i++) {
-                BlockPos[] positions = {
-                    new BlockPos(centerX + i, altarY - 4, centerZ + 8),
-                    new BlockPos(centerX + i, altarY - 4, centerZ - 8),
-                    new BlockPos(centerX + 8, altarY - 4, centerZ + i),
-                    new BlockPos(centerX - 8, altarY - 4, centerZ + i)
-                };
-                for (BlockPos pos : positions) {
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
-                }
-            }
-
-            // Tier 5 corner capstones (hellforged)
-            int[][] tier5Caps = {{8, 8}, {8, -8}, {-8, 8}, {-8, -8}};
-            for (int[] pos : tier5Caps) {
-                blocks.add(new StructureBlockInfo(
-                    new BlockPos(centerX + pos[0], altarY - 4, centerZ + pos[1]),
-                    getT5Capstone(), null));
-            }
-
-            // Tier 6 rune ring at distance 11
-            for (int i = -9; i <= 9; i++) {
-                BlockPos[] positions = {
-                    new BlockPos(centerX + i, altarY - 5, centerZ + 11),
-                    new BlockPos(centerX + i, altarY - 5, centerZ - 11),
-                    new BlockPos(centerX + 11, altarY - 5, centerZ + i),
-                    new BlockPos(centerX - 11, altarY - 5, centerZ + i)
-                };
-                for (BlockPos pos : positions) {
-                    blocks.add(new StructureBlockInfo(pos, getRuneBlock(), null));
-                    addRunePosition(pos);
-                }
-            }
-
-            // Tier 6 tall pillars at distance 11
-            int[][] tier6Pillars = {{11, 11}, {11, -11}, {-11, 11}, {-11, -11}};
-            for (int[] pos : tier6Pillars) {
-                for (int dy = -4; dy <= 2; dy++) {
-                    blocks.add(new StructureBlockInfo(
-                        new BlockPos(centerX + pos[0], altarY + dy, centerZ + pos[1]),
-                        getPillarBlock(), null));
-                }
-                // Crystal cluster cap on top
-                blocks.add(new StructureBlockInfo(
-                    new BlockPos(centerX + pos[0], altarY + 3, centerZ + pos[1]),
-                    getT6Capstone(), null));
-            }
-
-            return blocks;
-        }
-
-        @Override
-        public float getManualScale() { return 0.25f; }
+            )
+        );
     }
 }

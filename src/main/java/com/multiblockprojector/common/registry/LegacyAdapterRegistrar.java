@@ -2,6 +2,7 @@ package com.multiblockprojector.common.registry;
 
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.api.ProjectorAPI;
+import com.multiblockprojector.api.adapters.BloodMagicMultiblockAdapter;
 import com.multiblockprojector.api.adapters.IEMultiblockAdapter;
 import com.multiblockprojector.api.adapters.MekanismMultiblockAdapter;
 import net.neoforged.bus.api.EventPriority;
@@ -48,6 +49,20 @@ public class LegacyAdapterRegistrar {
                     UniversalProjector.LOGGER.info("Registered Mekanism multiblocks from adapter");
                 } catch (Exception e) {
                     UniversalProjector.LOGGER.error("Failed to load Mekanism multiblocks", e);
+                }
+            }
+
+            if (ModList.get().isLoaded("bloodmagic")) {
+                try {
+                    var registry = MultiblockRegistrySetup.getRegistry();
+                    for (var entry : BloodMagicMultiblockAdapter.discover()) {
+                        if (!registry.containsKey(entry.id())) {
+                            helper.register(entry.id(), entry.definition());
+                        }
+                    }
+                    UniversalProjector.LOGGER.info("Registered Blood Magic multiblocks from adapter");
+                } catch (Exception e) {
+                    UniversalProjector.LOGGER.error("Failed to load Blood Magic multiblocks", e);
                 }
             }
         });

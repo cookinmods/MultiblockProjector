@@ -1,7 +1,6 @@
 package com.multiblockprojector.api;
 
 import com.multiblockprojector.UniversalProjector;
-import com.multiblockprojector.api.adapters.BloodMagicMultiblockAdapter;
 
 import net.minecraft.resources.ResourceLocation;
 
@@ -82,20 +81,9 @@ public class UniversalMultiblockHandler {
             UniversalProjector.LOGGER.info("Mekanism multiblocks handled by registry-based adapter");
         }
 
-        // Try to load Blood Magic multiblocks if available
+        // Blood Magic multiblocks are now registered via LegacyAdapterRegistrar into the new registry.
         if (isModLoaded("bloodmagic")) {
-            UniversalProjector.LOGGER.info("Blood Magic mod detected, loading altar tiers...");
-            try {
-                int beforeCount = MULTIBLOCKS.size();
-                BloodMagicMultiblockAdapter.registerAllMultiblocks();
-                int bloodMagicCount = MULTIBLOCKS.size() - beforeCount;
-                realMultiblocksFound += bloodMagicCount;
-                UniversalProjector.LOGGER.info("Successfully loaded {} Blood Magic altar tier(s)", bloodMagicCount);
-            } catch (Exception e) {
-                UniversalProjector.LOGGER.error("Failed to load Blood Magic altar tiers", e);
-            }
-        } else {
-            UniversalProjector.LOGGER.info("Blood Magic mod not detected");
+            UniversalProjector.LOGGER.info("Blood Magic multiblocks handled by registry-based adapter");
         }
 
         // TODO: Add adapters for other mods (Create, etc.)
