@@ -13,6 +13,11 @@ import static com.multiblockprojector.UniversalProjector.rl;
 
 public class MessageFabricationProgress implements CustomPacketPayload {
 
+    private static boolean clientBuildActive = false;
+
+    public static boolean isClientBuildActive() { return clientBuildActive; }
+    public static void setClientBuildActive(boolean active) { clientBuildActive = active; }
+
     public static final Type<MessageFabricationProgress> TYPE = new Type<>(rl("fabrication_progress"));
 
     public static final StreamCodec<FriendlyByteBuf, MessageFabricationProgress> STREAM_CODEC =
@@ -38,6 +43,7 @@ public class MessageFabricationProgress implements CustomPacketPayload {
     }
 
     public static void handleClientSide(MessageFabricationProgress packet, Player player) {
+        clientBuildActive = packet.current < packet.total;
         player.displayClientMessage(
             Component.literal("Building... " + packet.current + "/" + packet.total + " blocks")
                 .withStyle(net.minecraft.ChatFormatting.GOLD),

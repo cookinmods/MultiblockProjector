@@ -6,7 +6,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -128,9 +127,7 @@ public class BatteryFabricatorItem extends AbstractProjectorItem {
 
     @Override
     public int getBarColor(@Nonnull ItemStack stack) {
-        Settings settings = getSettings(stack);
-        float ratio = (float) settings.getStoredEnergy() / MAX_ENERGY;
-        return Mth.hsvToRgb(0.0F, 0.0F, 0.5F + ratio * 0.5F); // White-ish energy bar
+        return 0x3CFE9A; // Mekanism energy green
     }
 
     public static String formatEnergy(int energy) {

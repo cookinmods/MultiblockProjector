@@ -8,6 +8,7 @@ import com.multiblockprojector.common.items.CreativeProjectorItem;
 import com.multiblockprojector.common.items.FabricatorItem;
 import com.multiblockprojector.common.network.MessageAutoBuild;
 import com.multiblockprojector.common.network.MessageFabricate;
+import com.multiblockprojector.common.network.MessageFabricationProgress;
 import com.multiblockprojector.common.projector.MultiblockProjection;
 import com.multiblockprojector.common.projector.Settings;
 import net.minecraft.client.Minecraft;
@@ -245,6 +246,9 @@ public class ProjectorClientHandler {
         // Swing the projector for visual feedback
         player.swing(InteractionHand.MAIN_HAND, true);
 
+        // Mark build active immediately so GUI is blocked before first progress packet
+        MessageFabricationProgress.setClientBuildActive(true);
+
         // Send network message to server to perform auto-build
         MessageAutoBuild.sendToServer(pos, InteractionHand.MAIN_HAND);
 
@@ -259,6 +263,8 @@ public class ProjectorClientHandler {
         player.swing(InteractionHand.MAIN_HAND, true);
 
         // Send fabrication request to server
+        // Note: don't set clientBuildActive eagerly here — server may reject (missing blocks/FE).
+        // The first MessageFabricationProgress from the server will set it.
         MessageFabricate.sendToServer(pos, InteractionHand.MAIN_HAND);
 
         // Clear ghost projections — server will handle the animated placement

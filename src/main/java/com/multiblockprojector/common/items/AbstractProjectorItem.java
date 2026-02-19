@@ -65,6 +65,10 @@ public abstract class AbstractProjectorItem extends Item {
         if (world.isClientSide) {
             switch (settings.getMode()) {
                 case NOTHING_SELECTED:
+                    // Block GUI opening while a build is in progress
+                    if (com.multiblockprojector.common.network.MessageFabricationProgress.isClientBuildActive()) {
+                        return InteractionResultHolder.pass(held);
+                    }
                     // Right Click: Open multiblock selection menu directly
                     settings.setMode(Settings.Mode.MULTIBLOCK_SELECTION);
                     settings.applyTo(held);
