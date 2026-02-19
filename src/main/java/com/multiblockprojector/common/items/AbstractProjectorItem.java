@@ -63,12 +63,15 @@ public abstract class AbstractProjectorItem extends Item {
         Settings settings = getSettings(held);
 
         if (world.isClientSide) {
+            // Block all interaction while a build is in progress
+            if (com.multiblockprojector.common.network.MessageFabricationProgress.isClientBuildActive()) {
+                return InteractionResultHolder.pass(held);
+            }
+
+            resetOtherProjectors(player, held, true);
+
             switch (settings.getMode()) {
                 case NOTHING_SELECTED:
-                    // Block GUI opening while a build is in progress
-                    if (com.multiblockprojector.common.network.MessageFabricationProgress.isClientBuildActive()) {
-                        return InteractionResultHolder.pass(held);
-                    }
                     // Right Click: Open multiblock selection menu directly
                     settings.setMode(Settings.Mode.MULTIBLOCK_SELECTION);
                     settings.applyTo(held);
@@ -97,6 +100,8 @@ public abstract class AbstractProjectorItem extends Item {
                     player.displayClientMessage(Component.literal("Building mode cancelled"), true);
                     break;
             }
+        } else {
+            resetOtherProjectors(player, held, false);
         }
 
         return InteractionResultHolder.success(held);
@@ -122,6 +127,32 @@ public abstract class AbstractProjectorItem extends Item {
 
     public static Settings getSettings(@Nullable ItemStack stack) {
         return new Settings(stack);
+    }
+
+    /**
+     * Reset all other projector items in the player's inventory to NOTHING_SELECTED mode.
+     * Prevents multiple projectors from being active simultaneously.
+     */
+    private static void resetOtherProjectors(Player player, ItemStack activeStack, boolean isClientSide) {
+        var inventory = player.getInventory();
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (stack == activeStack || !(stack.getItem() instanceof AbstractProjectorItem)) continue;
+
+            Settings otherSettings = getSettings(stack);
+            if (otherSettings.getMode() == Settings.Mode.NOTHING_SELECTED) continue;
+
+            if (isClientSide && otherSettings.getPos() != null) {
+                com.multiblockprojector.client.ProjectionManager.removeProjection(otherSettings.getPos());
+                com.multiblockprojector.client.BlockValidationManager.clearValidation(otherSettings.getPos());
+            }
+
+            otherSettings.setMode(Settings.Mode.NOTHING_SELECTED);
+            otherSettings.setMultiblock(null);
+            otherSettings.setPos(null);
+            otherSettings.setPlaced(false);
+            otherSettings.applyTo(stack);
+        }
     }
 
     protected void openGUI(InteractionHand hand, ItemStack held) {
