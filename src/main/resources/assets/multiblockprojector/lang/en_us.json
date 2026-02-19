@@ -12,7 +12,7 @@
   "desc.multiblockprojector.info.projector.noMultiblock": "No multiblock selected - Right click to choose",
   "desc.multiblockprojector.info.projector.usage": "Right click: Select multiblock | Shift + Right click: Switch modes",
   "desc.multiblockprojector.info.projector.hint.nothing_selected": "Right Click to select a multiblock",
-  "desc.multiblockprojector.info.projector.hint.projection": "Right Click: Rotate | Left Click: Place | Sneak + Right Click: Cancel | ESC: Cancel",
+  "desc.multiblockprojector.info.projector.hint.projection": "Left Click: Rotate | Right Click: Place | Sneak + Right Click: Cancel | ESC: Cancel",
   "desc.multiblockprojector.info.projector.hint.building": "Right Click: Cancel building mode | Build the structure to complete",
   
   "desc.multiblockprojector.info.projector.mode_0": "Nothing Selected",
