@@ -39,6 +39,11 @@ public class BatteryFabricatorItem extends AbstractProjectorItem {
 
         // Sneak + right-click: only link containers (no energy linking — we have internal battery)
         if (player.isShiftKeyDown()) {
+            Settings settings = getSettings(context.getItemInHand());
+            if (settings.getMode() == Settings.Mode.PROJECTION || settings.getMode() == Settings.Mode.BUILDING) {
+                return InteractionResult.PASS; // Let handleProjectionRightClick handle cancellation
+            }
+
             BlockPos target = context.getClickedPos();
             Level level = context.getLevel();
             InteractionHand hand = context.getHand();

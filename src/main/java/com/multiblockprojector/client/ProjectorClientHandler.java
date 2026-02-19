@@ -82,6 +82,7 @@ public class ProjectorClientHandler {
     public static void onMouseClick(InputEvent.MouseButton.Pre event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
+        if (mc.screen != null) return; // Don't intercept input when a GUI is open
 
         Player player = mc.player;
         ItemStack held = player.getMainHandItem();
@@ -130,6 +131,7 @@ public class ProjectorClientHandler {
     public static void onKeyInput(InputEvent.Key event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
+        if (mc.screen != null) return; // Don't intercept input when a GUI is open
 
         // Check for ESC key (key code 256)
         if (event.getKey() == 256 && event.getAction() == 1) { // 1 = key press

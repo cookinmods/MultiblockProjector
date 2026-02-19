@@ -124,10 +124,9 @@ dependencies {
     implementation files('libs/bloodmagic-3.4.0-46-alpha.jar')
 
 
-    // Create - using compileOnly to avoid build issues when JARs are not available
-    // Add Create JAR files to libs folder if you want to include Create support
-    compileOnly fileTree(dir: 'libs', include: '*create*.jar')
-    compileOnly fileTree(dir: 'libs', include: '*Create*.jar')
+    // Create
+    implementation fileTree(dir: 'libs', include: '*create*.jar')
+    implementation fileTree(dir: 'libs', include: '*Create*.jar')
 
     // Missing dependencies commented out for now
     //implementation "curse.maven:VicsPointBlank-961053:6028992"

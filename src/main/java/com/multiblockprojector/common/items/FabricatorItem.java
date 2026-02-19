@@ -34,8 +34,13 @@ public class FabricatorItem extends AbstractProjectorItem {
         Player player = context.getPlayer();
         if (player == null) return InteractionResult.PASS;
 
-        // Sneak + right-click on a block: link energy or container
+        // Sneak + right-click on a block: link energy or container (only when not projecting)
         if (player.isShiftKeyDown()) {
+            Settings settings = getSettings(context.getItemInHand());
+            if (settings.getMode() == Settings.Mode.PROJECTION || settings.getMode() == Settings.Mode.BUILDING) {
+                return InteractionResult.PASS; // Let handleProjectionRightClick handle cancellation
+            }
+
             BlockPos target = context.getClickedPos();
             Level level = context.getLevel();
             InteractionHand hand = context.getHand();

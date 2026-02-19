@@ -100,11 +100,24 @@ public class RequirementsPanel {
         this.requirements = reqs;
     }
 
+    public void updateBasicInfo(ItemStack fabricatorStack) {
+        Settings settings = AbstractProjectorItem.getSettings(fabricatorStack);
+        isBattery = fabricatorStack.getItem() instanceof BatteryFabricatorItem;
+        linkedEnergyPos = settings.getLinkedEnergyPos();
+        linkedChestPos = settings.getLinkedChestPos();
+        if (isBattery) {
+            this.availableFE = settings.getStoredEnergy();
+        } else {
+            this.availableFE = -1;
+        }
+    }
+
     public void clear() {
         this.requirements = List.of();
         this.totalFENeeded = 0;
-        this.availableFE = 0;
-        this.listWidget = null;
+        if (listWidget != null) {
+            listWidget.refreshRequirements(requirements);
+        }
     }
 
     /**
@@ -134,14 +147,15 @@ public class RequirementsPanel {
      * Render the fixed status lines (FE, energy, chest) below the scrollable list.
      */
     public void renderStatusLines(GuiGraphics graphics, int x, int y, int width) {
-        if (requirements.isEmpty()) return;
-
         int currentY = y;
 
         // FE line
         String feText;
         int feColor;
-        if (isBattery) {
+        if (totalFENeeded == 0 && requirements.isEmpty()) {
+            feText = "FE: —";
+            feColor = 0x888888;
+        } else if (isBattery) {
             boolean sufficient = availableFE >= totalFENeeded;
             feColor = sufficient ? 0x55FF55 : 0xFF5555;
             feText = "FE: " + BatteryFabricatorItem.formatEnergy(availableFE) + " / " +

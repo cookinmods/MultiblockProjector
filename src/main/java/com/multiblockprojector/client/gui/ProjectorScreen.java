@@ -113,7 +113,10 @@ public class ProjectorScreen extends Screen {
         updateFilteredMultiblocks();
         selectedMultiblock = null;
         previewRenderer.setMultiblock(null);
-        if (requirementsPanel != null) requirementsPanel.clear();
+        if (requirementsPanel != null) {
+            requirementsPanel.clear();
+            requirementsPanel.updateBasicInfo(projectorStack);
+        }
         rebuildWidgets();
     }
 
@@ -138,8 +141,7 @@ public class ProjectorScreen extends Screen {
         // --- Calculate dynamic list area ---
         listStartY = TAB_SELECTOR_Y + TAB_SELECTOR_HEIGHT + 4;
         selectButtonY = this.height - 30;
-        boolean showReqPanel = isFabricator && selectedMultiblock != null;
-        requirementsPanelHeight = showReqPanel ? 140 : 0;
+        requirementsPanelHeight = isFabricator ? 140 : 0;
         int listHeight = selectButtonY - listStartY - 6 - requirementsPanelHeight;
 
         // --- Multiblock list (AbstractSelectionList) ---
@@ -148,8 +150,9 @@ public class ProjectorScreen extends Screen {
         refreshListEntries();
         this.addRenderableWidget(multiblockList);
 
-        // --- Requirements scrollable list (fabricator only) ---
-        if (showReqPanel && requirementsPanel != null) {
+        // --- Requirements scrollable list (fabricator only, always visible) ---
+        if (isFabricator && requirementsPanel != null) {
+            requirementsPanel.updateBasicInfo(projectorStack);
             int reqPanelY = listStartY + listHeight + 6;
             int statusHeight = RequirementsPanel.getStatusLinesHeight();
             int reqTitleHeight = 14; // "Requirements:" title line
@@ -164,11 +167,11 @@ public class ProjectorScreen extends Screen {
             if (net.neoforged.fml.ModList.get().isLoaded("create")) {
                 int btnWidth = font.width("Add to Clipboard") + 8;
                 int btnX = MARGIN + reqWidth - btnWidth;
-                int btnY = reqPanelY;
+                int btnY = reqPanelY + 1;
                 this.addRenderableWidget(Button.builder(
                     Component.literal("Add to Clipboard"),
                     btn -> addRequirementsToClipboard()
-                ).bounds(btnX, btnY, btnWidth, 14).build());
+                ).bounds(btnX, btnY, btnWidth, 12).build());
             }
         }
 
@@ -332,8 +335,8 @@ public class ProjectorScreen extends Screen {
         int listBottom = listStartY + multiblockList.getHeight();
         drawBorder(guiGraphics, listX - 1, listStartY - 1, listX + listW + 1, listBottom + 1, 0xFF555555);
 
-        // Draw content for requirements panel
-        if (isFabricator && requirementsPanel != null && requirementsPanel.hasRequirements()) {
+        // Draw requirements panel (always visible for fabricators)
+        if (isFabricator && requirementsPanel != null) {
             int reqPanelY = listBottom + 6;
             int reqPanelBottom = selectButtonY - 4;
 
