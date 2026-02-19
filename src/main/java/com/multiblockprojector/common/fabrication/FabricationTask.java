@@ -59,12 +59,27 @@ public class FabricationTask {
             return false;
         });
 
+        this.queue = sorted(entries);
+    }
+
+    /**
+     * Constructor with pre-resolved placements (used by MBFs to place actual inventory blocks
+     * instead of display states, supporting BlockGroup flexibility).
+     */
+    public FabricationTask(ServerPlayer player, Level level, InteractionHand hand,
+                           List<PlacementEntry> resolvedPlacements) {
+        this.playerId = player.getUUID();
+        this.level = level;
+        this.hand = hand;
+        this.queue = sorted(resolvedPlacements);
+    }
+
+    private static List<PlacementEntry> sorted(List<PlacementEntry> entries) {
         // Sort bottom-to-top (ascending Y), then by X, then by Z within each layer
         entries.sort(Comparator.comparingInt((PlacementEntry e) -> e.worldPos.getY())
             .thenComparingInt(e -> e.worldPos.getX())
             .thenComparingInt(e -> e.worldPos.getZ()));
-
-        this.queue = entries;
+        return entries;
     }
 
     /**

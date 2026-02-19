@@ -1,6 +1,9 @@
 package com.multiblockprojector.common.network;
 
+import com.multiblockprojector.api.BlockEntry;
+import com.multiblockprojector.api.BlockGroup;
 import com.multiblockprojector.api.MultiblockDefinition;
+import com.multiblockprojector.api.SingleBlock;
 import com.multiblockprojector.common.fabrication.FabricationManager;
 import com.multiblockprojector.common.fabrication.FabricationTask;
 import com.multiblockprojector.common.items.AbstractProjectorItem;
@@ -83,39 +86,73 @@ public class MessageFabricate implements CustomPacketPayload {
         MultiblockDefinition multiblock = settings.getMultiblock();
         Level level = player.level();
 
-        // Build block requirement list from projection
+        // Build projection
         var variant = MultiblockProjection.getVariantFromSettings(multiblock, settings);
         MultiblockProjection projection = new MultiblockProjection(level, multiblock, variant);
         projection.setRotation(settings.getRotation());
         projection.setFlip(settings.isMirrored());
 
-        // Collect required blocks and calculate FE cost
-        Map<net.minecraft.world.level.block.Block, Integer> requiredBlocks = new LinkedHashMap<>();
-        List<BlockState> blockStates = new ArrayList<>();
-
+        // Collect positions and their block entries
+        record PositionEntry(BlockPos worldPos, BlockEntry blockEntry, BlockState displayState) {}
+        List<PositionEntry> positions = new ArrayList<>();
         projection.processAll((layerIdx, info) -> {
             BlockPos worldPos = packet.buildPos.offset(info.tPos);
-            BlockState state = info.getDisplayState(level, worldPos, 0);
-            if (!state.isAir()) {
-                requiredBlocks.merge(state.getBlock(), 1, Integer::sum);
-                blockStates.add(state);
+            BlockState display = info.getDisplayState(level, worldPos, 0);
+            if (!display.isAir()) {
+                positions.add(new PositionEntry(worldPos, info.blockEntry, display));
             }
             return false;
         });
-        int totalNonAir = blockStates.size();
 
-        // Calculate total FE cost
+        // Resolve each position to an actual block from inventory.
+        // For SingleBlock entries, requires the exact block.
+        // For BlockGroup entries, picks the first available matching block.
+        Map<net.minecraft.world.level.block.Block, Integer> available = countAvailableBlocks(player, settings, level);
+        List<FabricationTask.PlacementEntry> resolvedPlacements = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+
+        for (PositionEntry pos : positions) {
+            net.minecraft.world.level.block.Block resolved = resolveBlock(pos.blockEntry, available);
+            if (resolved != null) {
+                // Decrement available count
+                int remaining = available.get(resolved) - 1;
+                if (remaining <= 0) {
+                    available.remove(resolved);
+                } else {
+                    available.put(resolved, remaining);
+                }
+                resolvedPlacements.add(new FabricationTask.PlacementEntry(pos.worldPos, resolved.defaultBlockState()));
+            } else {
+                // No matching block found
+                String name = switch (pos.blockEntry) {
+                    case SingleBlock sb -> sb.state().getBlock().getName().getString();
+                    case BlockGroup bg -> bg.label().getString();
+                    default -> "Unknown";
+                };
+                if (missing.stream().noneMatch(s -> s.startsWith(name))) {
+                    missing.add(name);
+                }
+            }
+        }
+
+        if (!missing.isEmpty()) {
+            player.displayClientMessage(
+                Component.literal("Missing blocks: " + String.join(", ", missing.subList(0, Math.min(3, missing.size()))))
+                    .withStyle(ChatFormatting.RED), true);
+            return;
+        }
+
+        // Calculate total FE cost from resolved blocks
+        int totalNonAir = resolvedPlacements.size();
         double totalFE = 0;
-        for (BlockState state : blockStates) {
-            float hardness = Math.max(state.getDestroySpeed(level, BlockPos.ZERO), 0.1f);
+        for (var entry : resolvedPlacements) {
+            float hardness = Math.max(entry.state().getDestroySpeed(level, BlockPos.ZERO), 0.1f);
             double perBlock = 800.0 * hardness * (1.0 + 0.0008 * totalNonAir);
             totalFE += perBlock;
         }
         int totalFENeeded = (int) Math.ceil(totalFE);
 
-        // === PRE-VALIDATION ===
-
-        // 1. Check FE
+        // === PRE-VALIDATION: Check FE ===
         IEnergyStorage energySource = getEnergySource(stack, settings, level);
         if (energySource == null) {
             player.displayClientMessage(
@@ -132,32 +169,19 @@ public class MessageFabricate implements CustomPacketPayload {
             return;
         }
 
-        // 2. Check blocks in inventory + linked chest
-        Map<net.minecraft.world.level.block.Block, Integer> available = countAvailableBlocks(player, settings, level);
-        List<String> missing = new ArrayList<>();
-        for (var entry : requiredBlocks.entrySet()) {
-            int have = available.getOrDefault(entry.getKey(), 0);
-            if (have < entry.getValue()) {
-                missing.add(entry.getKey().getName().getString() + " (" + have + "/" + entry.getValue() + ")");
-            }
-        }
-        if (!missing.isEmpty()) {
-            player.displayClientMessage(
-                Component.literal("Missing blocks: " + String.join(", ", missing.subList(0, Math.min(3, missing.size()))))
-                    .withStyle(ChatFormatting.RED), true);
-            return;
-        }
-
         // === RESOURCE RESERVATION ===
 
-        // Extract FE
-        energySource.extractEnergy(totalFENeeded, false);
+        // Build consumption map from resolved placements
+        Map<net.minecraft.world.level.block.Block, Integer> toConsume = new LinkedHashMap<>();
+        for (var entry : resolvedPlacements) {
+            toConsume.merge(entry.state().getBlock(), 1, Integer::sum);
+        }
 
-        // Remove items from inventory + linked chest
-        consumeBlocks(player, settings, level, requiredBlocks);
+        energySource.extractEnergy(totalFENeeded, false);
+        consumeBlocks(player, settings, level, toConsume);
 
         // === CREATE FABRICATION TASK ===
-        FabricationTask task = new FabricationTask(serverPlayer, level, packet.buildPos, packet.hand, multiblock, settings);
+        FabricationTask task = new FabricationTask(serverPlayer, level, packet.hand, resolvedPlacements);
         FabricationManager.addTask(serverPlayer, task);
 
         // Reset fabricator to default mode
@@ -169,6 +193,27 @@ public class MessageFabricate implements CustomPacketPayload {
         player.displayClientMessage(
             Component.literal("Fabrication started! Building " + totalNonAir + " blocks...")
                 .withStyle(ChatFormatting.GOLD), true);
+    }
+
+    /**
+     * Find an available block in inventory that satisfies the given BlockEntry.
+     * Returns the Block to use, or null if no match is available.
+     */
+    private static net.minecraft.world.level.block.Block resolveBlock(
+            BlockEntry entry, Map<net.minecraft.world.level.block.Block, Integer> available) {
+        if (entry instanceof SingleBlock sb) {
+            net.minecraft.world.level.block.Block block = sb.state().getBlock();
+            return available.getOrDefault(block, 0) > 0 ? block : null;
+        } else if (entry instanceof BlockGroup bg) {
+            for (BlockState option : bg.options()) {
+                net.minecraft.world.level.block.Block block = option.getBlock();
+                if (available.getOrDefault(block, 0) > 0) {
+                    return block;
+                }
+            }
+            return null;
+        }
+        return null;
     }
 
     private static IEnergyStorage getEnergySource(ItemStack stack, Settings settings, Level level) {
