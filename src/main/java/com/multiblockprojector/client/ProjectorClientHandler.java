@@ -3,6 +3,7 @@ package com.multiblockprojector.client;
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.client.BlockValidationManager;
 import com.multiblockprojector.common.items.AbstractProjectorItem;
+import com.multiblockprojector.common.items.CreativeProjectorItem;
 import com.multiblockprojector.common.network.MessageAutoBuild;
 import com.multiblockprojector.common.projector.MultiblockProjection;
 import com.multiblockprojector.common.projector.Settings;
@@ -112,8 +113,12 @@ public class ProjectorClientHandler {
      * Base ProjectorItem places projection; subclasses will auto-build or fabricate.
      */
     private static void handleProjectionAction(Player player, ItemStack held, Settings settings, BlockPos pos) {
-        // Base behavior — place projection and enter building mode
-        placeProjection(player, settings, held, pos);
+        if (held.getItem() instanceof CreativeProjectorItem) {
+            autoBuildProjection(player, settings, held, pos);
+        } else {
+            // Base ProjectorItem — place projection and enter building mode
+            placeProjection(player, settings, held, pos);
+        }
     }
 
     @SubscribeEvent

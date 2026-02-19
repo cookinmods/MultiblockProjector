@@ -1,7 +1,8 @@
 package com.multiblockprojector.common.network;
 
 import com.multiblockprojector.api.MultiblockDefinition;
-import com.multiblockprojector.common.items.ProjectorItem;
+import com.multiblockprojector.common.items.AbstractProjectorItem;
+import com.multiblockprojector.common.items.CreativeProjectorItem;
 import com.multiblockprojector.common.projector.MultiblockProjection;
 import com.multiblockprojector.common.projector.Settings;
 import net.minecraft.core.BlockPos;
@@ -56,17 +57,12 @@ public class MessageAutoBuild implements CustomPacketPayload {
     }
 
     public static void handleServerSide(MessageAutoBuild packet, Player player) {
-        // Only allow in creative mode
-        if (!player.isCreative()) {
-            return;
-        }
-
         ItemStack stack = player.getItemInHand(packet.hand);
-        if (!(stack.getItem() instanceof ProjectorItem)) {
+        if (!(stack.getItem() instanceof CreativeProjectorItem)) {
             return;
         }
 
-        Settings settings = ProjectorItem.getSettings(stack);
+        Settings settings = AbstractProjectorItem.getSettings(stack);
         if (settings.getMode() != Settings.Mode.PROJECTION || settings.getMultiblock() == null) {
             return;
         }

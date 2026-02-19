@@ -3,7 +3,12 @@
   "item.multiblockprojector.projector.selecting": "Multiblock Projector (Selecting)",
   "item.multiblockprojector.projector.projection_mode": "Multiblock Projector (Projecting)",
   "item.multiblockprojector.projector.building_mode": "Multiblock Projector (Building)",
-  
+
+  "item.multiblockprojector.creative_projector": "Creative Multiblock Projector",
+  "item.multiblockprojector.creative_projector.selecting": "Creative Multiblock Projector (Selecting)",
+  "item.multiblockprojector.creative_projector.projection_mode": "Creative Multiblock Projector (Projecting)",
+  "item.multiblockprojector.creative_projector.building_mode": "Creative Multiblock Projector (Building)",
+
   "itemGroup.multiblockprojector.main": "Multiblock Projector",
   
   "desc.multiblockprojector.info.projector.build0": "Creates projections of multiblock structures",
