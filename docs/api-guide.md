@@ -2,6 +2,8 @@
 
 Add multiblock projections to the Multiblock Projector mod from your own mod. Players will be able to browse, preview, and project your multiblocks using the projector item.
 
+For loading `.nbt` structure files without writing code, see [Schematic & NBT Guide](schematic-nbt-guide.md).
+
 ## Setup
 
 ### Gradle Dependency
@@ -77,7 +79,7 @@ The core record stored in the registry. Each definition represents one multibloc
 | Field | Type | Description |
 |-------|------|-------------|
 | `displayName` | `Component` | Name shown in the GUI list |
-| `modId` | `String` | Your mod ID — used for grouping in the mod selector |
+| `modId` | `String` | Your mod ID — used for grouping in the mod selector tab |
 | `category` | `MultiblockCategory` | Organization category |
 | `variants` | `List<SizeVariant>` | Size options. Single-element list for fixed-size |
 | `structureProvider` | `StructureProvider` | Creates the block layout on demand |
@@ -133,7 +135,7 @@ For variable-size multiblocks, read dimensions from the variant:
 
 ### MultiblockStructure
 
-A record containing the block layout as a `Map<BlockPos, BlockEntry>`. Positions use absolute coordinates starting at `(0, 0, 0)`. Air blocks should be omitted.
+A record containing the block layout as a `Map<BlockPos, BlockEntry>`. Positions use absolute coordinates starting at `(0, 0, 0)`.
 
 ```java
 Map<BlockPos, BlockEntry> blocks = new LinkedHashMap<>();
@@ -146,9 +148,11 @@ return new MultiblockStructure(blocks);  // size auto-computed from bounding box
 
 Use `LinkedHashMap` to preserve insertion order — blocks are rendered and animated in this order during the build-up preview.
 
+**Air positions:** Omit positions you don't care about. For positions that **must** be empty, use `AirEntry` (see below).
+
 ### BlockEntry
 
-A sealed interface with two implementations:
+A sealed interface with three implementations:
 
 #### SingleBlock
 
@@ -179,6 +183,19 @@ Use `BlockGroup` when multiple block types are acceptable at a position, such as
 - Decorative blocks (any stone brick variant)
 - Tier-based components (any valid rune type)
 
+#### AirEntry
+
+Enforces that a position must be empty. If a player places any block here, the projector shows a red-tinted overlay and marks it as incorrect.
+
+```java
+new AirEntry()
+```
+
+Use `AirEntry` for positions that must remain clear, such as:
+- Interior spaces of hollow structures
+- Doorways and windows
+- Passages between multiblock sections
+
 ### MultiblockCategory
 
 Predefined categories for organizing multiblocks in the GUI:
@@ -199,6 +216,31 @@ public static final MultiblockCategory MY_CATEGORY = new MultiblockCategory(
     Component.literal("Rituals")
 );
 ```
+
+## Rendering & Validation Rules
+
+The projector uses the same rendering and validation rules for both API-registered multiblocks and schematic-loaded structures.
+
+### Ghost Block Rendering
+
+| Structure Position | World State | Rendered As | Color |
+|--------------------|-------------|-------------|-------|
+| Solid block | Air (empty) | Translucent ghost of expected block | White `(1.0, 1.0, 1.0, 0.4)` |
+| Solid block | Correct block | Not rendered (hidden) | — |
+| Solid block | Wrong block | Translucent ghost of expected block | Red `(1.0, 0.3, 0.3, 0.4)` |
+| Air | Air (empty) | Not rendered | — |
+| Air | Has a block | Translucent ghost of the occupying block | Red `(1.0, 0.3, 0.3, 0.4)` |
+| Structure void | Anything | Not rendered | — |
+
+### Validation
+
+- Incorrect blocks trigger an "Incorrect block placed!" chat message in red the first time they are detected
+- When all positions are valid, a "Multiblock structure completed!" message appears in green
+- Validation runs continuously during building mode
+
+### Auto-Build
+
+The auto-build command places all missing solid blocks at once (creative/operator only). It does **not** erase blocks at air positions — it only adds, never removes.
 
 ## Complete Examples
 
@@ -310,7 +352,7 @@ In the GUI preview, all four pedestal positions will cycle through diamond, emer
 ## Tips
 
 - **Insertion order matters.** Use `LinkedHashMap` for the block map. The build-up animation adds blocks in iteration order.
-- **Omit air.** Don't add air blocks to the structure map — only include blocks the player needs to place.
+- **Omit positions you don't care about.** Only include positions that matter. Use `AirEntry` for positions that must stay empty; omit positions that are irrelevant.
 - **Block type matching.** `SingleBlock.matches()` checks block type only, not block state properties. A furnace facing north will match a furnace facing east.
 - **Reuse BlockGroup instances.** If multiple positions accept the same set of blocks, create one `BlockGroup` and reuse it across positions.
 - **Guard your registration.** Always check `ModList.get().isLoaded("multiblockprojector")` before accessing API classes to avoid `NoClassDefFoundError` when the projector mod isn't installed.

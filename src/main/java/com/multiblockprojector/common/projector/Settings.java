@@ -33,6 +33,7 @@ public class Settings {
     public static final String KEY_POSITION = "pos";
     public static final String KEY_AUTO_BUILD = "autoBuild";
     public static final String KEY_SIZE_PRESET = "sizePreset";
+    public static final String KEY_SOURCE = "source";
 
     private Mode mode;
     private Rotation rotation;
@@ -41,6 +42,7 @@ public class Settings {
     private boolean mirror;
     private boolean isPlaced;
     private int sizePresetIndex = 0;
+    private Source source = Source.REGISTRY;
     
     public Settings() {
         this(new CompoundTag());
@@ -73,6 +75,9 @@ public class Settings {
             this.mirror = settingsNbt.getBoolean(KEY_MIRROR);
             this.isPlaced = settingsNbt.getBoolean(KEY_PLACED);
             this.sizePresetIndex = settingsNbt.getInt(KEY_SIZE_PRESET);
+            this.source = settingsNbt.contains(KEY_SOURCE)
+                ? Source.values()[Mth.clamp(settingsNbt.getInt(KEY_SOURCE), 0, Source.values().length - 1)]
+                : Source.REGISTRY;
 
             if (settingsNbt.contains(KEY_MULTIBLOCK, Tag.TAG_STRING)) {
                 String str = settingsNbt.getString(KEY_MULTIBLOCK);
@@ -127,10 +132,17 @@ public class Settings {
     @Nullable
     public MultiblockDefinition getMultiblock() {
         if (multiblockId == null) return null;
+        if (source == Source.SCHEMATIC) {
+            // SchematicIndex is client-only; return null on dedicated server
+            if (!net.neoforged.fml.loading.FMLEnvironment.dist.isClient()) return null;
+            return com.multiblockprojector.client.schematic.SchematicIndex.get()
+                .getDefinitionById(multiblockId);
+        }
         return MultiblockIndex.get().getById(multiblockId).orElse(null);
     }
 
     public void setMultiblock(@Nullable MultiblockDefinition multiblock) {
+        this.source = Source.REGISTRY;
         if (multiblock == null) {
             this.multiblockId = null;
         } else {
@@ -141,6 +153,14 @@ public class Settings {
     public void setMultiblockId(@Nullable ResourceLocation id) {
         this.multiblockId = id;
     }
+
+    public void setSchematic(com.multiblockprojector.client.schematic.SchematicEntry entry) {
+        this.source = Source.SCHEMATIC;
+        this.multiblockId = entry.id();
+    }
+
+    public Source getSource() { return this.source; }
+    public void setSource(Source source) { this.source = source; }
 
     @Nullable
     public ResourceLocation getMultiblockId() {
@@ -167,6 +187,7 @@ public class Settings {
         nbt.putBoolean(KEY_MIRROR, this.mirror);
         nbt.putBoolean(KEY_PLACED, this.isPlaced);
         nbt.putInt(KEY_SIZE_PRESET, this.sizePresetIndex);
+        nbt.putInt(KEY_SOURCE, this.source.ordinal());
 
         if (this.multiblockId != null) {
             nbt.putString(KEY_MULTIBLOCK, this.multiblockId.toString());
@@ -196,6 +217,10 @@ public class Settings {
         return "\"Settings\":[" + toNbt().toString() + "]";
     }
     
+    public enum Source {
+        REGISTRY, SCHEMATIC
+    }
+
     public enum Mode {
         NOTHING_SELECTED, MULTIBLOCK_SELECTION, PROJECTION, BUILDING;
         

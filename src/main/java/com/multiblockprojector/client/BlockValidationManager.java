@@ -30,20 +30,20 @@ public class BlockValidationManager {
                 BlockPos worldPos = projectionCenter.offset(info.tPos);
                 BlockState actualState = level.getBlockState(worldPos);
 
-                // Don't validate air block entries
                 BlockState displayState = info.getDisplayState(level, worldPos, 0);
+
                 if (displayState.isAir()) {
-                    return false;
-                }
-
-                // Check if the actual block matches the requirement
-                boolean matches = info.matches(actualState);
-
-                if (!matches) {
-                    // Block is incorrect if it's not air and doesn't match
+                    // Air entry: incorrect if something occupies this position
                     if (!actualState.isAir()) {
                         incorrectBlocks.add(worldPos.immutable());
                     }
+                    return false;
+                }
+
+                // Solid block entry: check if the actual block matches
+                boolean matches = info.matches(actualState);
+                if (!matches && !actualState.isAir()) {
+                    incorrectBlocks.add(worldPos.immutable());
                 }
 
                 return false; // Continue processing
@@ -116,21 +116,25 @@ public class BlockValidationManager {
                 BlockPos worldPos = projectionCenter.offset(info.tPos);
                 BlockState actualState = level.getBlockState(worldPos);
 
-                // Skip air block entries
                 BlockState displayState = info.getDisplayState(level, worldPos, 0);
+
                 if (displayState.isAir()) {
+                    // Air entry: incomplete if something occupies this position
+                    if (!actualState.isAir()) {
+                        hasIncompleteBlocks[0] = true;
+                        return true;
+                    }
                     return false;
                 }
 
-                // Check if block is missing or incorrect
+                // Solid block entry: incomplete if missing or wrong block
                 boolean matches = info.matches(actualState);
-
                 if (actualState.isAir() || !matches) {
                     hasIncompleteBlocks[0] = true;
-                    return true; // Stop processing
+                    return true;
                 }
 
-                return false; // Continue processing
+                return false;
             });
 
             if (hasIncompleteBlocks[0]) {

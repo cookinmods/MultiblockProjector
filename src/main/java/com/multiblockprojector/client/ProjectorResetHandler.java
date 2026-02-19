@@ -106,13 +106,14 @@ public class ProjectorResetHandler {
      */
     private static void resetProjectorNBT(ItemStack stack) {
         if (!(stack.getItem() instanceof ProjectorItem)) return;
-        
+
         Settings settings = ProjectorItem.getSettings(stack);
         settings.setMode(Settings.Mode.NOTHING_SELECTED);
+        settings.setMultiblock(null);
         settings.setPos(null);
         settings.setPlaced(false);
         settings.applyTo(stack);
-        
+
         UniversalProjector.LOGGER.info("Reset projector NBT to nothing selected mode");
     }
 }
