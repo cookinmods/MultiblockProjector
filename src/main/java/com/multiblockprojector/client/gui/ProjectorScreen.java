@@ -493,15 +493,6 @@ public class ProjectorScreen extends Screen {
             clipboardCooldown = 20; // Re-enable after 1 second
         }
         this.setFocused(null);
-
-        // Show confirmation in chat (action bar is hidden behind solid GUI background)
-        if (minecraft.player != null) {
-            minecraft.player.displayClientMessage(
-                Component.literal("Requirements added to clipboard")
-                    .withStyle(net.minecraft.ChatFormatting.GREEN),
-                false
-            );
-        }
     }
 
     private boolean hasClipboardInInventory() {
