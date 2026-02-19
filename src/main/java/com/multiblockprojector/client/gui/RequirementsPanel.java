@@ -3,19 +3,24 @@ package com.multiblockprojector.client.gui;
 import com.multiblockprojector.api.MultiblockDefinition;
 import com.multiblockprojector.common.items.AbstractProjectorItem;
 import com.multiblockprojector.common.items.BatteryFabricatorItem;
-import com.multiblockprojector.common.projector.MultiblockProjection;
 import com.multiblockprojector.common.projector.Settings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractSelectionList;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
+import javax.annotation.Nonnull;
 import java.util.*;
 
 public class RequirementsPanel {
+
+    private static final int LINE_HEIGHT = 12;
+    private static final int STATUS_LINES_HEIGHT = LINE_HEIGHT * 3 + 6; // FE + energy + chest + padding
 
     private final Font font;
     private List<BlockRequirement> requirements = List.of();
@@ -24,6 +29,8 @@ public class RequirementsPanel {
     private boolean isBattery = false;
     private BlockPos linkedEnergyPos = null;
     private BlockPos linkedChestPos = null;
+
+    private RequirementListWidget listWidget;
 
     public record BlockRequirement(Block block, String name, int needed, int have) {}
 
@@ -64,7 +71,6 @@ public class RequirementsPanel {
         this.totalFENeeded = (int) Math.ceil(totalFE);
 
         // Count available blocks from player inventory
-        // (Client-side: we can only check local player inventory, not linked chest)
         Map<Block, Integer> available = new HashMap<>();
         var player = Minecraft.getInstance().player;
         if (player != null) {
@@ -81,8 +87,7 @@ public class RequirementsPanel {
         if (isBattery) {
             this.availableFE = settings.getStoredEnergy();
         } else {
-            // Can't check linked energy source from client — show "Linked" status instead
-            this.availableFE = -1; // -1 = unknown (linked source)
+            this.availableFE = -1;
         }
 
         // Build requirements list
@@ -99,46 +104,39 @@ public class RequirementsPanel {
         this.requirements = List.of();
         this.totalFENeeded = 0;
         this.availableFE = 0;
+        this.listWidget = null;
     }
 
     /**
-     * Render the requirements panel.
-     * @return the total height used for rendering
+     * Creates or recreates the scrollable list widget for the given bounds.
+     * Must be called from init() and the returned widget added via addRenderableWidget().
      */
-    public int render(GuiGraphics graphics, int x, int y, int width, int maxHeight) {
-        if (requirements.isEmpty()) return 0;
+    public RequirementListWidget createListWidget(int x, int width, int listY, int listHeight) {
+        listWidget = new RequirementListWidget(Minecraft.getInstance(), width, listHeight, listY, LINE_HEIGHT);
+        listWidget.setX(x);
+        refreshListEntries();
+        return listWidget;
+    }
+
+    private void refreshListEntries() {
+        if (listWidget == null) return;
+        listWidget.refreshRequirements(requirements);
+    }
+
+    /**
+     * Call after update() to refresh the list widget entries.
+     */
+    public void refreshEntries() {
+        refreshListEntries();
+    }
+
+    /**
+     * Render the fixed status lines (FE, energy, chest) below the scrollable list.
+     */
+    public void renderStatusLines(GuiGraphics graphics, int x, int y, int width) {
+        if (requirements.isEmpty()) return;
 
         int currentY = y;
-        int lineHeight = 12;
-
-        // Title
-        graphics.drawString(font, "Requirements:", x + 4, currentY, 0xFFFFFF);
-        currentY += lineHeight + 2;
-
-        // Block requirements (scrollable within available space)
-        int maxBlockLines = (maxHeight - 50) / lineHeight; // Reserve space for FE and link info
-        int shown = 0;
-        for (BlockRequirement req : requirements) {
-            if (shown >= maxBlockLines) break;
-
-            boolean sufficient = req.have >= req.needed;
-            int color = sufficient ? 0x55FF55 : 0xFF5555;
-            String icon = sufficient ? "\u2713" : "\u2717"; // checkmark or x
-            String text = icon + " " + req.name;
-            String count = req.have + "/" + req.needed;
-
-            graphics.drawString(font, text, x + 6, currentY, color);
-            graphics.drawString(font, count, x + width - font.width(count) - 6, currentY, color);
-            currentY += lineHeight;
-            shown++;
-        }
-
-        if (shown < requirements.size()) {
-            graphics.drawString(font, "+" + (requirements.size() - shown) + " more...", x + 6, currentY, 0x888888);
-            currentY += lineHeight;
-        }
-
-        currentY += 4;
 
         // FE line
         String feText;
@@ -158,7 +156,7 @@ public class RequirementsPanel {
                      BatteryFabricatorItem.formatEnergy(totalFENeeded) + " needed";
         }
         graphics.drawString(font, feText, x + 4, currentY, feColor);
-        currentY += lineHeight;
+        currentY += LINE_HEIGHT;
 
         // Energy source line
         if (isBattery) {
@@ -171,7 +169,7 @@ public class RequirementsPanel {
         } else {
             graphics.drawString(font, "Energy: Not linked", x + 4, currentY, 0xFF5555);
         }
-        currentY += lineHeight;
+        currentY += LINE_HEIGHT;
 
         // Chest line
         if (linkedChestPos != null) {
@@ -181,12 +179,98 @@ public class RequirementsPanel {
         } else {
             graphics.drawString(font, "Chest: Not linked", x + 4, currentY, 0xFF5555);
         }
-        currentY += lineHeight;
-
-        return currentY - y;
     }
 
     public boolean hasRequirements() {
         return !requirements.isEmpty();
+    }
+
+    public static int getStatusLinesHeight() {
+        return STATUS_LINES_HEIGHT;
+    }
+
+    // ---- Inner widget: Scrollable block requirements list ----
+
+    public class RequirementListWidget extends AbstractSelectionList<RequirementListWidget.Entry> {
+
+        private final int panelWidth;
+
+        public RequirementListWidget(Minecraft mc, int width, int height, int y, int itemHeight) {
+            super(mc, width, height, y, itemHeight);
+            this.panelWidth = width;
+        }
+
+        public void refreshRequirements(List<BlockRequirement> reqs) {
+            this.clearEntries();
+            for (BlockRequirement req : reqs) {
+                this.addEntry(new Entry(req));
+            }
+        }
+
+        @Override
+        public int getRowWidth() {
+            return this.width - 12;
+        }
+
+        @Override
+        protected int getScrollbarPosition() {
+            return this.getX() + this.width - 6;
+        }
+
+        @Override
+        public int getRowLeft() {
+            return this.getX() + 2;
+        }
+
+        @Override
+        protected void renderListBackground(@Nonnull GuiGraphics graphics) {
+            // Empty — parent draws background
+        }
+
+        @Override
+        protected void renderListSeparators(@Nonnull GuiGraphics graphics) {
+            // Empty
+        }
+
+        @Override
+        protected void renderSelection(@Nonnull GuiGraphics graphics, int y, int width, int height, int borderColor, int fillColor) {
+            // Empty — no selection highlight for requirements
+        }
+
+        @Override
+        protected void enableScissor(@Nonnull GuiGraphics graphics) {
+            graphics.enableScissor(this.getX(), this.getY(), this.getX() + this.width, this.getY() + this.height);
+        }
+
+        @Override
+        protected void updateWidgetNarration(@Nonnull NarrationElementOutput output) {
+        }
+
+        public class Entry extends AbstractSelectionList.Entry<Entry> {
+            final BlockRequirement req;
+
+            Entry(BlockRequirement req) {
+                this.req = req;
+            }
+
+            @Override
+            public void render(@Nonnull GuiGraphics graphics, int index, int top, int left,
+                              int width, int height, int mouseX, int mouseY,
+                              boolean hovering, float partialTick) {
+                boolean sufficient = req.have >= req.needed;
+                int color = sufficient ? 0x55FF55 : 0xFF5555;
+                String icon = sufficient ? "\u2713" : "\u2717";
+                String text = icon + " " + req.name;
+                String count = req.have + "/" + req.needed;
+
+                graphics.drawString(font, text, left + 4, top + 1, color);
+                graphics.drawString(font, count, left + width - font.width(count) - 4, top + 1, color);
+            }
+
+            @Override
+            public boolean mouseClicked(double mouseX, double mouseY, int button) {
+                return false; // No selection behavior
+            }
+        }
     }
 }

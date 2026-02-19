@@ -138,13 +138,28 @@ public class ProjectorScreen extends Screen {
         // --- Calculate dynamic list area ---
         listStartY = TAB_SELECTOR_Y + TAB_SELECTOR_HEIGHT + 4;
         selectButtonY = this.height - 30;
-        requirementsPanelHeight = (isFabricator && selectedMultiblock != null) ? 140 : 0;
+        boolean showReqPanel = isFabricator && selectedMultiblock != null;
+        requirementsPanelHeight = showReqPanel ? 140 : 0;
         int listHeight = selectButtonY - listStartY - 6 - requirementsPanelHeight;
 
         // --- Multiblock list (AbstractSelectionList) ---
-        multiblockList = new MultiblockListWidget(this.minecraft, leftPanelWidth, listHeight, listStartY, ENTRY_HEIGHT);
+        multiblockList = new MultiblockListWidget(this.minecraft, leftPanelWidth - MARGIN * 2, listHeight, listStartY, ENTRY_HEIGHT);
+        multiblockList.setX(MARGIN);
         refreshListEntries();
         this.addRenderableWidget(multiblockList);
+
+        // --- Requirements scrollable list (fabricator only) ---
+        if (showReqPanel && requirementsPanel != null) {
+            int reqPanelY = listStartY + listHeight + 6;
+            int statusHeight = RequirementsPanel.getStatusLinesHeight();
+            int reqTitleHeight = 14; // "Requirements:" title line
+            int reqListHeight = requirementsPanelHeight - statusHeight - reqTitleHeight - 4;
+            int reqListY = reqPanelY + reqTitleHeight;
+            int reqWidth = leftPanelWidth - MARGIN * 2;
+
+            var reqListWidget = requirementsPanel.createListWidget(MARGIN, reqWidth, reqListY, reqListHeight);
+            this.addRenderableWidget(reqListWidget);
+        }
 
         // --- Select button pinned to bottom ---
         this.addRenderableWidget(Button.builder(
@@ -229,6 +244,7 @@ public class ProjectorScreen extends Screen {
         previewRenderer.setMultiblock(multiblock, variant);
         if (isFabricator && requirementsPanel != null) {
             requirementsPanel.update(multiblock, currentSizePresetIndex, projectorStack);
+            requirementsPanel.refreshEntries();
         }
     }
 
@@ -299,16 +315,29 @@ public class ProjectorScreen extends Screen {
         guiGraphics.fill(0, 0, leftPanelWidth, this.height, 0x80000000);
         guiGraphics.fill(leftPanelWidth, 0, this.width, this.height, 0x80404040);
 
-        // Render all widgets (mod selector button, multiblock list, select button)
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        // Draw border around multiblock list area
+        int listX = MARGIN;
+        int listW = leftPanelWidth - MARGIN * 2;
+        int listBottom = listStartY + multiblockList.getHeight();
+        drawBorder(guiGraphics, listX - 1, listStartY - 1, listX + listW + 1, listBottom + 1, 0xFF555555);
 
-        // Render requirements panel for fabricator items
+        // Draw border and content for requirements panel
         if (isFabricator && requirementsPanel != null && requirementsPanel.hasRequirements()) {
-            int reqY = listStartY + multiblockList.getHeight() + 4;
-            int reqWidth = leftPanelWidth - MARGIN * 2;
-            int reqMaxHeight = selectButtonY - reqY - 4;
-            requirementsPanel.render(guiGraphics, MARGIN, reqY, reqWidth, reqMaxHeight);
+            int reqPanelY = listBottom + 6;
+            int reqPanelBottom = selectButtonY - 4;
+            drawBorder(guiGraphics, listX - 1, reqPanelY - 1, listX + listW + 1, reqPanelBottom + 1, 0xFF555555);
+
+            // "Requirements:" title
+            guiGraphics.drawString(this.font, "Requirements:", listX + 4, reqPanelY + 2, 0xFFFFFF);
+
+            // Status lines (FE, energy, chest) pinned at bottom of the panel
+            int statusHeight = RequirementsPanel.getStatusLinesHeight();
+            int statusY = reqPanelBottom - statusHeight;
+            requirementsPanel.renderStatusLines(guiGraphics, listX, statusY, listW);
         }
+
+        // Render all widgets (mod selector button, multiblock list, select button, req list)
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
 
         // Draw vertical separator
         guiGraphics.fill(leftPanelWidth, 0, leftPanelWidth + 2, this.height, 0xFF555555);
@@ -404,6 +433,13 @@ public class ProjectorScreen extends Screen {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    private static void drawBorder(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
+        graphics.fill(x1, y1, x2, y1 + 1, color);     // top
+        graphics.fill(x1, y2 - 1, x2, y2, color);      // bottom
+        graphics.fill(x1, y1, x1 + 1, y2, color);       // left
+        graphics.fill(x2 - 1, y1, x2, y2, color);       // right
     }
 
     @Override
