@@ -199,6 +199,10 @@ public class RequirementsPanel {
         return !requirements.isEmpty();
     }
 
+    public List<BlockRequirement> getRequirements() {
+        return requirements;
+    }
+
     public static int getStatusLinesHeight() {
         return STATUS_LINES_HEIGHT;
     }

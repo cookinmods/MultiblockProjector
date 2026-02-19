@@ -66,6 +66,7 @@ public class ProjectorScreen extends Screen {
     private boolean isDragging = false;
     private int selectButtonY;
     private int requirementsPanelHeight;
+    private Button clipboardButton;
 
     public ProjectorScreen(ItemStack projectorStack, InteractionHand hand) {
         super(Component.translatable("gui.multiblockprojector.projector"));
@@ -168,10 +169,12 @@ public class ProjectorScreen extends Screen {
                 int btnWidth = font.width("Add to Clipboard") + 8;
                 int btnX = MARGIN + reqWidth - btnWidth;
                 int btnY = reqPanelY + 1;
-                this.addRenderableWidget(Button.builder(
+                clipboardButton = Button.builder(
                     Component.literal("Add to Clipboard"),
                     btn -> addRequirementsToClipboard()
-                ).bounds(btnX, btnY, btnWidth, 12).build());
+                ).bounds(btnX, btnY, btnWidth, 12).build();
+                clipboardButton.active = hasClipboardInInventory() && requirementsPanel.hasRequirements();
+                this.addRenderableWidget(clipboardButton);
             }
         }
 
@@ -259,6 +262,13 @@ public class ProjectorScreen extends Screen {
         if (isFabricator && requirementsPanel != null) {
             requirementsPanel.update(multiblock, currentSizePresetIndex, projectorStack);
             requirementsPanel.refreshEntries();
+            updateClipboardButtonState();
+        }
+    }
+
+    private void updateClipboardButtonState() {
+        if (clipboardButton != null) {
+            clipboardButton.active = hasClipboardInInventory() && requirementsPanel != null && requirementsPanel.hasRequirements();
         }
     }
 
@@ -455,7 +465,29 @@ public class ProjectorScreen extends Screen {
     }
 
     private void addRequirementsToClipboard() {
-        // TODO: Add block requirements to Create mod's clipboard item
+        if (requirementsPanel == null || !requirementsPanel.hasRequirements()) return;
+
+        var entries = new java.util.ArrayList<com.multiblockprojector.common.network.MessageClipboardWrite.EntryData>();
+        for (var req : requirementsPanel.getRequirements()) {
+            entries.add(new com.multiblockprojector.common.network.MessageClipboardWrite.EntryData(
+                req.name(), req.needed(), req.have()
+            ));
+        }
+        com.multiblockprojector.common.network.MessageClipboardWrite.sendToServer(entries);
+    }
+
+    private boolean hasClipboardInInventory() {
+        var player = Minecraft.getInstance().player;
+        if (player == null) return false;
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack stack = inv.getItem(i);
+            if (!stack.isEmpty() && stack.getItem() instanceof net.minecraft.world.item.BlockItem blockItem
+                && blockItem.getBlock() instanceof com.simibubi.create.content.equipment.clipboard.ClipboardBlock) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void drawBorder(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
