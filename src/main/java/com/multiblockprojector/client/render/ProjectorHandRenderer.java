@@ -3,7 +3,7 @@ package com.multiblockprojector.client.render;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.multiblockprojector.UniversalProjector;
-import com.multiblockprojector.common.items.ProjectorItem;
+import com.multiblockprojector.common.items.AbstractProjectorItem;
 import com.multiblockprojector.common.projector.Settings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -36,12 +36,12 @@ public class ProjectorHandRenderer {
         if (event.getHand() == InteractionHand.MAIN_HAND) {
             // Use event.getItemStack() — it represents the actual stack being
             // rendered this frame, which stays correct during equip animations
-            if (event.getItemStack().getItem() instanceof ProjectorItem) {
+            if (event.getItemStack().getItem() instanceof AbstractProjectorItem) {
                 event.setCanceled(true);
 
                 // Hide the item completely in projection mode so it doesn't
                 // obscure the ghost block preview the player is aiming
-                Settings settings = ProjectorItem.getSettings(event.getItemStack());
+                Settings settings = AbstractProjectorItem.getSettings(event.getItemStack());
                 if (settings.getMode() != Settings.Mode.PROJECTION) {
                     renderProjectorTwoHanded(event, mc, event.getItemStack());
                 }
@@ -49,7 +49,7 @@ public class ProjectorHandRenderer {
         } else {
             // Cancel off-hand rendering when main hand has projector to avoid
             // the idle arm overlapping our custom two-handed arm positioning.
-            if (mc.player.getMainHandItem().getItem() instanceof ProjectorItem) {
+            if (mc.player.getMainHandItem().getItem() instanceof AbstractProjectorItem) {
                 event.setCanceled(true);
             }
         }

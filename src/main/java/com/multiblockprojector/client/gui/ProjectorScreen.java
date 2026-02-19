@@ -2,7 +2,7 @@ package com.multiblockprojector.client.gui;
 
 import com.multiblockprojector.api.MultiblockDefinition;
 import com.multiblockprojector.api.MultiblockDefinition.SizeVariant;
-import com.multiblockprojector.common.items.ProjectorItem;
+import com.multiblockprojector.common.items.AbstractProjectorItem;
 import com.multiblockprojector.common.network.MessageProjectorSync;
 import com.multiblockprojector.common.projector.Settings;
 import com.multiblockprojector.client.schematic.SchematicIndex;
@@ -65,7 +65,7 @@ public class ProjectorScreen extends Screen {
         super(Component.translatable("gui.multiblockprojector.projector"));
         this.projectorStack = projectorStack;
         this.hand = hand;
-        this.settings = ProjectorItem.getSettings(projectorStack);
+        this.settings = AbstractProjectorItem.getSettings(projectorStack);
         this.previewRenderer = new SimpleMultiblockPreviewRenderer();
 
         var index = MultiblockIndex.get();

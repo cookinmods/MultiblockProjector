@@ -1,6 +1,6 @@
 package com.multiblockprojector.common.network;
 
-import com.multiblockprojector.common.items.ProjectorItem;
+import com.multiblockprojector.common.items.AbstractProjectorItem;
 import com.multiblockprojector.common.projector.Settings;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -54,7 +54,7 @@ public class MessageProjectorSync implements CustomPacketPayload {
     
     public static void handleServerSide(MessageProjectorSync packet, Player player) {
         ItemStack stack = player.getItemInHand(packet.hand);
-        if (stack.getItem() instanceof ProjectorItem) {
+        if (stack.getItem() instanceof AbstractProjectorItem) {
             Settings settings = new Settings(packet.settingsNbt);
             settings.applyTo(stack);
         }
@@ -62,7 +62,7 @@ public class MessageProjectorSync implements CustomPacketPayload {
     
     public static void handleClientSide(MessageProjectorSync packet, Player player) {
         ItemStack stack = player.getItemInHand(packet.hand);
-        if (stack.getItem() instanceof ProjectorItem) {
+        if (stack.getItem() instanceof AbstractProjectorItem) {
             Settings settings = new Settings(packet.settingsNbt);
             settings.applyTo(stack);
         }
