@@ -336,8 +336,8 @@ public class ProjectorScreen extends Screen {
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Draw panel backgrounds
-        guiGraphics.fill(0, 0, leftPanelWidth, this.height, 0x80000000);
-        guiGraphics.fill(leftPanelWidth, 0, this.width, this.height, 0x80404040);
+        guiGraphics.fill(0, 0, leftPanelWidth, this.height, 0xFF1A1A1A);
+        guiGraphics.fill(leftPanelWidth, 0, this.width, this.height, 0xFF2D2D2D);
 
         // Draw border around multiblock list area
         int listX = MARGIN;

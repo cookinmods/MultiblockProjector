@@ -25,7 +25,7 @@ import java.util.UUID;
  */
 public class FabricationTask {
 
-    private static final int TICKS_PER_BLOCK = 4;
+    private static final int TICKS_PER_BLOCK = 2;
 
     private final UUID playerId;
     private final Level level;

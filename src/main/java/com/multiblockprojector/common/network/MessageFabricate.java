@@ -160,6 +160,12 @@ public class MessageFabricate implements CustomPacketPayload {
         FabricationTask task = new FabricationTask(serverPlayer, level, packet.buildPos, packet.hand, multiblock, settings);
         FabricationManager.addTask(serverPlayer, task);
 
+        // Reset fabricator to default mode
+        settings.setMode(Settings.Mode.NOTHING_SELECTED);
+        settings.setPos(null);
+        settings.setPlaced(false);
+        settings.applyTo(stack);
+
         player.displayClientMessage(
             Component.literal("Fabrication started! Building " + totalNonAir + " blocks...")
                 .withStyle(ChatFormatting.GOLD), true);
