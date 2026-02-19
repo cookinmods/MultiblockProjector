@@ -156,10 +156,8 @@ public class RequirementsPanel {
             feText = "FE: —";
             feColor = 0x888888;
         } else if (isBattery) {
-            boolean sufficient = availableFE >= totalFENeeded;
-            feColor = sufficient ? 0x55FF55 : 0xFF5555;
-            feText = "FE: " + BatteryFabricatorItem.formatEnergy(availableFE) + " / " +
-                     BatteryFabricatorItem.formatEnergy(totalFENeeded) + " needed";
+            feColor = availableFE >= totalFENeeded ? 0x55FF55 : 0xFF5555;
+            feText = "FE: " + BatteryFabricatorItem.formatEnergy(totalFENeeded) + " needed";
         } else if (availableFE == -1) {
             feText = "FE: " + BatteryFabricatorItem.formatEnergy(totalFENeeded) + " needed";
             feColor = linkedEnergyPos != null ? 0xFFFF55 : 0xFF5555;
