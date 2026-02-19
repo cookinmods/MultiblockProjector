@@ -67,6 +67,7 @@ public class ProjectorScreen extends Screen {
     private int selectButtonY;
     private int requirementsPanelHeight;
     private Button clipboardButton;
+    private int clipboardCooldown = 0;
 
     public ProjectorScreen(ItemStack projectorStack, InteractionHand hand) {
         super(Component.translatable("gui.multiblockprojector.projector"));
@@ -416,6 +417,17 @@ public class ProjectorScreen extends Screen {
     }
 
     @Override
+    public void tick() {
+        super.tick();
+        if (clipboardCooldown > 0) {
+            clipboardCooldown--;
+            if (clipboardCooldown == 0 && clipboardButton != null) {
+                clipboardButton.active = hasClipboardInInventory() && requirementsPanel != null && requirementsPanel.hasRequirements();
+            }
+        }
+    }
+
+    @Override
     public void onClose() {
         // If the screen closes without a multiblock being selected (e.g. ESC, game quit),
         // reset mode from MULTIBLOCK_SELECTION back to NOTHING_SELECTED so the item
@@ -475,7 +487,11 @@ public class ProjectorScreen extends Screen {
         }
         com.multiblockprojector.common.network.MessageClipboardWrite.sendToServer(entries);
 
-        // Clear screen focus so button doesn't look stuck highlighted
+        // Disable button briefly as visual feedback
+        if (clipboardButton != null) {
+            clipboardButton.active = false;
+            clipboardCooldown = 20; // Re-enable after 1 second
+        }
         this.setFocused(null);
 
         // Show confirmation in chat (action bar is hidden behind solid GUI background)
