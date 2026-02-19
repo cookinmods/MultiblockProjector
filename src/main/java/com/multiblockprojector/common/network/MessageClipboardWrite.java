@@ -9,8 +9,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
-import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -98,29 +97,12 @@ public class MessageClipboardWrite implements CustomPacketPayload {
             boolean checked = entry.have >= entry.needed;
             int amount = entry.needed;
 
-            // Build text: "Block Name x 64 (1s 0)" matching Create's format
-            Component nameComponent = Component.translatable(block.getDescriptionId())
-                .setStyle(Style.EMPTY.withHoverEvent(
-                    new HoverEvent(HoverEvent.Action.SHOW_ITEM, new HoverEvent.ItemStackInfo(icon))));
+            String name = icon.getHoverName().getString();
+            MutableComponent text = Component.literal(name + " x " + amount);
 
-            Component amountComponent = Component.literal(" x " + amount)
-                .withStyle(ChatFormatting.BLACK);
-
-            int stacks = amount / 64;
-            int remainder = amount % 64;
-            String stackStr = stacks > 0
-                ? " (" + stacks + "s " + remainder + ")"
-                : "";
-            Component stackComponent = Component.literal(stackStr)
-                .withStyle(ChatFormatting.GRAY);
-
-            Component text = Component.empty()
-                .append(nameComponent.copy().withStyle(checked ? ChatFormatting.DARK_GREEN : ChatFormatting.BLUE))
-                .append(amountComponent)
-                .append(stackComponent);
-
-            ClipboardEntry clipEntry = new ClipboardEntry(checked, text.copy())
-                .displayItem(icon, checked ? 0 : amount);
+            ClipboardEntry clipEntry = new ClipboardEntry(checked, text);
+            clipEntry.icon = icon;
+            clipEntry.itemAmount = amount;
 
             currentPage.add(clipEntry);
 
