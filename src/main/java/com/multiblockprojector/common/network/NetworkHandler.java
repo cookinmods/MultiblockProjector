@@ -32,6 +32,12 @@ public class NetworkHandler {
             MessageAutoBuild.STREAM_CODEC,
             NetworkHandler::handleAutoBuildServerSide
         );
+
+        registrar.playToServer(
+            MessageLinkBlock.TYPE,
+            MessageLinkBlock.STREAM_CODEC,
+            NetworkHandler::handleLinkBlockServerSide
+        );
     }
     
     private static void handleClientSide(MessageProjectorSync packet, IPayloadContext context) {
@@ -54,6 +60,14 @@ public class NetworkHandler {
         context.enqueueWork(() -> {
             if (context.player() != null) {
                 MessageAutoBuild.handleServerSide(packet, context.player());
+            }
+        });
+    }
+
+    private static void handleLinkBlockServerSide(MessageLinkBlock packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() != null) {
+                MessageLinkBlock.handleServerSide(packet, context.player());
             }
         });
     }
