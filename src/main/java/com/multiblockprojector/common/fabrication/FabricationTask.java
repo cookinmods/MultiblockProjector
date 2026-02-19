@@ -76,6 +76,14 @@ public class FabricationTask {
             return true;
         }
 
+        // If the next block's chunk is unloaded, finish everything instantly
+        PlacementEntry next = queue.get(currentIndex);
+        if (!level.isLoaded(next.worldPos)) {
+            completeInstantly();
+            complete(player);
+            return true;
+        }
+
         tickCounter++;
         if (tickCounter >= TICKS_PER_BLOCK) {
             tickCounter = 0;
