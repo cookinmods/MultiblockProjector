@@ -14,7 +14,7 @@ import javax.annotation.Nonnull;
 import java.util.List;
 
 /**
- * Creative-only projector that instantly auto-builds multiblocks on right-click.
+ * Creative-only fabricator that auto-builds multiblocks on right-click.
  * No BUILDING mode — right-click in PROJECTION mode sends auto-build to server.
  */
 public class CreativeProjectorItem extends AbstractProjectorItem {
@@ -25,7 +25,7 @@ public class CreativeProjectorItem extends AbstractProjectorItem {
 
     @Override
     public void appendHoverText(@Nonnull ItemStack stack, TooltipContext ctx, @Nonnull List<Component> tooltip, @Nonnull TooltipFlag flagIn) {
-        tooltip.add(Component.literal("Instantly builds multiblock structures")
+        tooltip.add(Component.literal("Auto-builds multiblock structures")
             .withStyle(ChatFormatting.LIGHT_PURPLE));
 
         if (Screen.hasShiftDown()) {
@@ -35,7 +35,7 @@ public class CreativeProjectorItem extends AbstractProjectorItem {
             tooltip.add(Component.literal(""));
             tooltip.add(Component.literal("Projection Mode:").withStyle(ChatFormatting.LIGHT_PURPLE));
             tooltip.add(Component.literal("Left-click to rotate 90 degrees").withStyle(ChatFormatting.GRAY));
-            tooltip.add(Component.literal("Right-click to instantly build").withStyle(ChatFormatting.GRAY));
+            tooltip.add(Component.literal("Right-click to auto-build").withStyle(ChatFormatting.GRAY));
         } else {
             tooltip.add(Component.literal("Hold Shift for instructions").withStyle(ChatFormatting.DARK_GRAY));
         }

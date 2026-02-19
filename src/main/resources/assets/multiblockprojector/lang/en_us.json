@@ -4,10 +4,10 @@
   "item.multiblockprojector.projector.projection_mode": "Multiblock Projector (Projecting)",
   "item.multiblockprojector.projector.building_mode": "Multiblock Projector (Building)",
 
-  "item.multiblockprojector.creative_projector": "Creative Multiblock Projector",
-  "item.multiblockprojector.creative_projector.selecting": "Creative Multiblock Projector (Selecting)",
-  "item.multiblockprojector.creative_projector.projection_mode": "Creative Multiblock Projector (Projecting)",
-  "item.multiblockprojector.creative_projector.building_mode": "Creative Multiblock Projector (Building)",
+  "item.multiblockprojector.creative_projector": "Creative Multiblock Fabricator",
+  "item.multiblockprojector.creative_projector.selecting": "Creative Multiblock Fabricator (Selecting)",
+  "item.multiblockprojector.creative_projector.projection_mode": "Creative Multiblock Fabricator (Projecting)",
+  "item.multiblockprojector.creative_projector.building_mode": "Creative Multiblock Fabricator (Building)",
 
   "item.multiblockprojector.fabricator": "Multiblock Fabricator",
   "item.multiblockprojector.fabricator.selecting": "Multiblock Fabricator (Selecting)",
