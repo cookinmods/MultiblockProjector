@@ -2,6 +2,7 @@ package com.multiblockprojector;
 
 import com.multiblockprojector.common.CommonProxy;
 import com.multiblockprojector.common.UPContent;
+import com.multiblockprojector.common.items.BatteryFabricatorEnergyStorage;
 import com.multiblockprojector.common.registry.LegacyAdapterRegistrar;
 import com.multiblockprojector.common.registry.MultiblockRegistrySetup;
 import net.minecraft.resources.ResourceLocation;
@@ -10,6 +11,8 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,6 +46,7 @@ public class UniversalProjector {
 
         // Setup lifecycle events
         modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(this::registerCapabilities);
         
         // Initialize proxy
         proxy.init();
@@ -50,6 +54,14 @@ public class UniversalProjector {
     
     private void commonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info("Multiblock Projector common setup");
+    }
+
+    private void registerCapabilities(RegisterCapabilitiesEvent event) {
+        event.registerItem(
+            Capabilities.EnergyStorage.ITEM,
+            (stack, ctx) -> new BatteryFabricatorEnergyStorage(stack),
+            UPContent.BATTERY_FABRICATOR.get()
+        );
     }
     
     public static ResourceLocation rl(String path) {

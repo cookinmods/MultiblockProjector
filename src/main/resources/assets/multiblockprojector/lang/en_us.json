@@ -9,6 +9,16 @@
   "item.multiblockprojector.creative_projector.projection_mode": "Creative Multiblock Projector (Projecting)",
   "item.multiblockprojector.creative_projector.building_mode": "Creative Multiblock Projector (Building)",
 
+  "item.multiblockprojector.fabricator": "Multiblock Fabricator",
+  "item.multiblockprojector.fabricator.selecting": "Multiblock Fabricator (Selecting)",
+  "item.multiblockprojector.fabricator.projection_mode": "Multiblock Fabricator (Projecting)",
+  "item.multiblockprojector.fabricator.building_mode": "Multiblock Fabricator (Building)",
+
+  "item.multiblockprojector.battery_fabricator": "Battery Powered MBF",
+  "item.multiblockprojector.battery_fabricator.selecting": "Battery Powered MBF (Selecting)",
+  "item.multiblockprojector.battery_fabricator.projection_mode": "Battery Powered MBF (Projecting)",
+  "item.multiblockprojector.battery_fabricator.building_mode": "Battery Powered MBF (Building)",
+
   "itemGroup.multiblockprojector.main": "Multiblock Projector",
   
   "desc.multiblockprojector.info.projector.build0": "Creates projections of multiblock structures",
