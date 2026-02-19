@@ -39,7 +39,8 @@ public class RequirementsPanel {
 
         // Get selected variant
         var variant = multiblock.variants().get(Math.min(sizePresetIndex, multiblock.variants().size() - 1));
-        var structure = multiblock.structureProvider().create(variant, null);
+        var level = Minecraft.getInstance().level;
+        var structure = multiblock.structureProvider().create(variant, level);
 
         // Count required blocks
         Map<Block, Integer> required = new LinkedHashMap<>();
