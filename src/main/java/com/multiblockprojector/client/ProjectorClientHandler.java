@@ -3,8 +3,11 @@ package com.multiblockprojector.client;
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.client.BlockValidationManager;
 import com.multiblockprojector.common.items.AbstractProjectorItem;
+import com.multiblockprojector.common.items.BatteryFabricatorItem;
 import com.multiblockprojector.common.items.CreativeProjectorItem;
+import com.multiblockprojector.common.items.FabricatorItem;
 import com.multiblockprojector.common.network.MessageAutoBuild;
+import com.multiblockprojector.common.network.MessageFabricate;
 import com.multiblockprojector.common.projector.MultiblockProjection;
 import com.multiblockprojector.common.projector.Settings;
 import net.minecraft.client.Minecraft;
@@ -115,6 +118,8 @@ public class ProjectorClientHandler {
     private static void handleProjectionAction(Player player, ItemStack held, Settings settings, BlockPos pos) {
         if (held.getItem() instanceof CreativeProjectorItem) {
             autoBuildProjection(player, settings, held, pos);
+        } else if (held.getItem() instanceof FabricatorItem || held.getItem() instanceof BatteryFabricatorItem) {
+            fabricateProjection(player, settings, held, pos);
         } else {
             // Base ProjectorItem — place projection and enter building mode
             placeProjection(player, settings, held, pos);
@@ -242,6 +247,19 @@ public class ProjectorClientHandler {
         MessageAutoBuild.sendToServer(pos, InteractionHand.MAIN_HAND);
 
         // Clear the aim projection immediately (server will handle settings changes)
+        if (lastAimPos != null) {
+            ProjectionManager.removeProjection(lastAimPos);
+            lastAimPos = null;
+        }
+    }
+
+    private static void fabricateProjection(Player player, Settings settings, ItemStack held, BlockPos pos) {
+        player.swing(InteractionHand.MAIN_HAND, true);
+
+        // Send fabrication request to server
+        MessageFabricate.sendToServer(pos, InteractionHand.MAIN_HAND);
+
+        // Clear ghost projections — server will handle the animated placement
         if (lastAimPos != null) {
             ProjectionManager.removeProjection(lastAimPos);
             lastAimPos = null;

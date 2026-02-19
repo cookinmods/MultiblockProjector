@@ -38,6 +38,18 @@ public class NetworkHandler {
             MessageLinkBlock.STREAM_CODEC,
             NetworkHandler::handleLinkBlockServerSide
         );
+
+        registrar.playToServer(
+            MessageFabricate.TYPE,
+            MessageFabricate.STREAM_CODEC,
+            NetworkHandler::handleFabricateServerSide
+        );
+
+        registrar.playToClient(
+            MessageFabricationProgress.TYPE,
+            MessageFabricationProgress.STREAM_CODEC,
+            NetworkHandler::handleFabricationProgressClientSide
+        );
     }
     
     private static void handleClientSide(MessageProjectorSync packet, IPayloadContext context) {
@@ -68,6 +80,22 @@ public class NetworkHandler {
         context.enqueueWork(() -> {
             if (context.player() != null) {
                 MessageLinkBlock.handleServerSide(packet, context.player());
+            }
+        });
+    }
+
+    private static void handleFabricateServerSide(MessageFabricate packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() != null) {
+                MessageFabricate.handleServerSide(packet, context.player());
+            }
+        });
+    }
+
+    private static void handleFabricationProgressClientSide(MessageFabricationProgress packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() != null) {
+                MessageFabricationProgress.handleClientSide(packet, context.player());
             }
         });
     }
