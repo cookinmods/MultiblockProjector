@@ -32,6 +32,32 @@ public class NetworkHandler {
             MessageAutoBuild.STREAM_CODEC,
             NetworkHandler::handleAutoBuildServerSide
         );
+
+        registrar.playToServer(
+            MessageLinkBlock.TYPE,
+            MessageLinkBlock.STREAM_CODEC,
+            NetworkHandler::handleLinkBlockServerSide
+        );
+
+        registrar.playToServer(
+            MessageFabricate.TYPE,
+            MessageFabricate.STREAM_CODEC,
+            NetworkHandler::handleFabricateServerSide
+        );
+
+        registrar.playToClient(
+            MessageFabricationProgress.TYPE,
+            MessageFabricationProgress.STREAM_CODEC,
+            NetworkHandler::handleFabricationProgressClientSide
+        );
+
+        if (net.neoforged.fml.ModList.get().isLoaded("create")) {
+            registrar.playToServer(
+                MessageClipboardWrite.TYPE,
+                MessageClipboardWrite.STREAM_CODEC,
+                NetworkHandler::handleClipboardWriteServerSide
+            );
+        }
     }
     
     private static void handleClientSide(MessageProjectorSync packet, IPayloadContext context) {
@@ -54,6 +80,38 @@ public class NetworkHandler {
         context.enqueueWork(() -> {
             if (context.player() != null) {
                 MessageAutoBuild.handleServerSide(packet, context.player());
+            }
+        });
+    }
+
+    private static void handleLinkBlockServerSide(MessageLinkBlock packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() != null) {
+                MessageLinkBlock.handleServerSide(packet, context.player());
+            }
+        });
+    }
+
+    private static void handleFabricateServerSide(MessageFabricate packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() != null) {
+                MessageFabricate.handleServerSide(packet, context.player());
+            }
+        });
+    }
+
+    private static void handleFabricationProgressClientSide(MessageFabricationProgress packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() != null) {
+                MessageFabricationProgress.handleClientSide(packet, context.player());
+            }
+        });
+    }
+
+    private static void handleClipboardWriteServerSide(MessageClipboardWrite packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() != null) {
+                MessageClipboardWrite.handleServerSide(packet, context.player());
             }
         });
     }

@@ -3,7 +3,7 @@ package com.multiblockprojector.client;
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.client.ProjectionManager;
 import com.multiblockprojector.client.BlockValidationManager;
-import com.multiblockprojector.common.items.ProjectorItem;
+import com.multiblockprojector.common.items.AbstractProjectorItem;
 import com.multiblockprojector.common.projector.Settings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -67,8 +67,8 @@ public class ProjectorResetHandler {
         // Check if a projector item was dropped
         if (event.getEntity() instanceof ItemEntity itemEntity) {
             ItemStack stack = itemEntity.getItem();
-            if (stack.getItem() instanceof ProjectorItem) {
-                Settings settings = ProjectorItem.getSettings(stack);
+            if (stack.getItem() instanceof AbstractProjectorItem) {
+                Settings settings = AbstractProjectorItem.getSettings(stack);
                 
                 // If this projector had any projections, clear them since it's returning to no selection mode
                 if (settings.getPos() != null) {
@@ -95,7 +95,7 @@ public class ProjectorResetHandler {
         // Check main inventory
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
             ItemStack stack = player.getInventory().getItem(i);
-            if (stack.getItem() instanceof ProjectorItem) {
+            if (stack.getItem() instanceof AbstractProjectorItem) {
                 resetProjectorNBT(stack);
             }
         }
@@ -105,9 +105,9 @@ public class ProjectorResetHandler {
      * Reset projector ItemStack NBT to nothing selected mode
      */
     private static void resetProjectorNBT(ItemStack stack) {
-        if (!(stack.getItem() instanceof ProjectorItem)) return;
+        if (!(stack.getItem() instanceof AbstractProjectorItem)) return;
 
-        Settings settings = ProjectorItem.getSettings(stack);
+        Settings settings = AbstractProjectorItem.getSettings(stack);
         settings.setMode(Settings.Mode.NOTHING_SELECTED);
         settings.setMultiblock(null);
         settings.setPos(null);

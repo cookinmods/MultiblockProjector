@@ -1,6 +1,9 @@
 package com.multiblockprojector.common;
 
 import com.multiblockprojector.UniversalProjector;
+import com.multiblockprojector.common.items.BatteryFabricatorItem;
+import com.multiblockprojector.common.items.CreativeProjectorItem;
+import com.multiblockprojector.common.items.FabricatorItem;
 import com.multiblockprojector.common.items.ProjectorItem;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -15,16 +18,19 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  * Content registration for Universal Projector
  */
 public class UPContent {
-    
+
     // Items
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(Registries.ITEM, UniversalProjector.MODID);
-    
+
     // Creative Tab
     public static final DeferredRegister<CreativeModeTab> CREATIVE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, UniversalProjector.MODID);
-    
+
     // Item Registry
     public static final DeferredHolder<Item, ProjectorItem> PROJECTOR = ITEMS.register("projector", ProjectorItem::new);
-    
+    public static final DeferredHolder<Item, CreativeProjectorItem> CREATIVE_PROJECTOR = ITEMS.register("creative_projector", CreativeProjectorItem::new);
+    public static final DeferredHolder<Item, FabricatorItem> FABRICATOR = ITEMS.register("fabricator", FabricatorItem::new);
+    public static final DeferredHolder<Item, BatteryFabricatorItem> BATTERY_FABRICATOR = ITEMS.register("battery_fabricator", BatteryFabricatorItem::new);
+
     // Creative Tab Registry
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> CREATIVE_TAB = CREATIVE_TABS.register("main", () ->
         CreativeModeTab.builder()
@@ -32,14 +38,17 @@ public class UPContent {
             .icon(() -> new ItemStack(PROJECTOR.get()))
             .displayItems((params, output) -> {
                 output.accept(PROJECTOR.get());
+                output.accept(CREATIVE_PROJECTOR.get());
+                output.accept(FABRICATOR.get());
+                output.accept(BATTERY_FABRICATOR.get());
             })
             .build()
     );
-    
+
     public static void init(IEventBus modEventBus) {
         ITEMS.register(modEventBus);
         CREATIVE_TABS.register(modEventBus);
-        
+
         UniversalProjector.LOGGER.info("Registered Universal Projector content");
     }
 }

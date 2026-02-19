@@ -2,7 +2,9 @@ package com.multiblockprojector.client.gui;
 
 import com.multiblockprojector.api.MultiblockDefinition;
 import com.multiblockprojector.api.MultiblockDefinition.SizeVariant;
-import com.multiblockprojector.common.items.ProjectorItem;
+import com.multiblockprojector.common.items.AbstractProjectorItem;
+import com.multiblockprojector.common.items.BatteryFabricatorItem;
+import com.multiblockprojector.common.items.FabricatorItem;
 import com.multiblockprojector.common.network.MessageProjectorSync;
 import com.multiblockprojector.common.projector.Settings;
 import com.multiblockprojector.client.schematic.SchematicIndex;
@@ -55,18 +57,29 @@ public class ProjectorScreen extends Screen {
     private Button sizeIncreaseButton;
 
     private SimpleMultiblockPreviewRenderer previewRenderer;
+    private RequirementsPanel requirementsPanel;
+    private final boolean isFabricator;
     private MultiblockDefinition selectedMultiblock;
     private boolean selectedIsSchematic = false;
     private ResourceLocation selectedSchematicId = null;
     private int currentSizePresetIndex = 0;
     private boolean isDragging = false;
+    private int selectButtonY;
+    private int requirementsPanelHeight;
+    private Button clipboardButton;
+    private int clipboardCooldown = 0;
 
     public ProjectorScreen(ItemStack projectorStack, InteractionHand hand) {
         super(Component.translatable("gui.multiblockprojector.projector"));
         this.projectorStack = projectorStack;
         this.hand = hand;
-        this.settings = ProjectorItem.getSettings(projectorStack);
+        this.settings = AbstractProjectorItem.getSettings(projectorStack);
         this.previewRenderer = new SimpleMultiblockPreviewRenderer();
+        this.isFabricator = projectorStack.getItem() instanceof FabricatorItem
+            || projectorStack.getItem() instanceof BatteryFabricatorItem;
+        if (isFabricator) {
+            this.requirementsPanel = new RequirementsPanel(Minecraft.getInstance().font);
+        }
 
         var index = MultiblockIndex.get();
         var tabs = index.getTabs();
@@ -102,6 +115,10 @@ public class ProjectorScreen extends Screen {
         updateFilteredMultiblocks();
         selectedMultiblock = null;
         previewRenderer.setMultiblock(null);
+        if (requirementsPanel != null) {
+            requirementsPanel.clear();
+            requirementsPanel.updateBasicInfo(projectorStack);
+        }
         rebuildWidgets();
     }
 
@@ -125,13 +142,42 @@ public class ProjectorScreen extends Screen {
 
         // --- Calculate dynamic list area ---
         listStartY = TAB_SELECTOR_Y + TAB_SELECTOR_HEIGHT + 4;
-        int selectButtonY = this.height - 30;
-        int listHeight = selectButtonY - listStartY - 6;
+        selectButtonY = this.height - 30;
+        requirementsPanelHeight = isFabricator ? 140 : 0;
+        int listHeight = selectButtonY - listStartY - 6 - requirementsPanelHeight;
 
         // --- Multiblock list (AbstractSelectionList) ---
-        multiblockList = new MultiblockListWidget(this.minecraft, leftPanelWidth, listHeight, listStartY, ENTRY_HEIGHT);
+        multiblockList = new MultiblockListWidget(this.minecraft, leftPanelWidth - MARGIN * 2, listHeight, listStartY, ENTRY_HEIGHT);
+        multiblockList.setX(MARGIN);
         refreshListEntries();
         this.addRenderableWidget(multiblockList);
+
+        // --- Requirements scrollable list (fabricator only, always visible) ---
+        if (isFabricator && requirementsPanel != null) {
+            requirementsPanel.updateBasicInfo(projectorStack);
+            int reqPanelY = listStartY + listHeight + 6;
+            int statusHeight = RequirementsPanel.getStatusLinesHeight();
+            int reqTitleHeight = 14; // "Requirements:" title line
+            int reqListHeight = requirementsPanelHeight - statusHeight - reqTitleHeight - 8;
+            int reqListY = reqPanelY + reqTitleHeight;
+            int reqWidth = leftPanelWidth - MARGIN * 2;
+
+            var reqListWidget = requirementsPanel.createListWidget(MARGIN, reqWidth, reqListY, reqListHeight);
+            this.addRenderableWidget(reqListWidget);
+
+            // "Add to Clipboard" button — only if Create is installed
+            if (net.neoforged.fml.ModList.get().isLoaded("create")) {
+                int btnWidth = font.width("Add to Clipboard") + 8;
+                int btnX = MARGIN + reqWidth - btnWidth;
+                int btnY = reqPanelY + 1;
+                clipboardButton = Button.builder(
+                    Component.literal("Add to Clipboard"),
+                    btn -> addRequirementsToClipboard()
+                ).bounds(btnX, btnY, btnWidth, 12).build();
+                clipboardButton.active = hasClipboardInInventory() && requirementsPanel.hasRequirements();
+                this.addRenderableWidget(clipboardButton);
+            }
+        }
 
         // --- Select button pinned to bottom ---
         this.addRenderableWidget(Button.builder(
@@ -214,6 +260,17 @@ public class ProjectorScreen extends Screen {
     private void updatePreviewWithSize(MultiblockDefinition multiblock) {
         var variant = multiblock.variants().get(currentSizePresetIndex);
         previewRenderer.setMultiblock(multiblock, variant);
+        if (isFabricator && requirementsPanel != null) {
+            requirementsPanel.update(multiblock, currentSizePresetIndex, projectorStack);
+            requirementsPanel.refreshEntries();
+            updateClipboardButtonState();
+        }
+    }
+
+    private void updateClipboardButtonState() {
+        if (clipboardButton != null) {
+            clipboardButton.active = hasClipboardInInventory() && requirementsPanel != null && requirementsPanel.hasRequirements();
+        }
     }
 
     private void selectMultiblockForPreview(MultiblockDefinition multiblock) {
@@ -235,6 +292,11 @@ public class ProjectorScreen extends Screen {
         if (sizeIncreaseButton != null) sizeIncreaseButton.visible = showSizeButtons;
         if (showSizeButtons) {
             updateSizeButtons(multiblock);
+        }
+
+        if (isFabricator && requirementsPanel != null) {
+            requirementsPanel.update(multiblock, currentSizePresetIndex, projectorStack);
+            rebuildWidgets(); // Rebuild to adjust list height
         }
     }
 
@@ -275,10 +337,36 @@ public class ProjectorScreen extends Screen {
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Draw panel backgrounds
-        guiGraphics.fill(0, 0, leftPanelWidth, this.height, 0x80000000);
-        guiGraphics.fill(leftPanelWidth, 0, this.width, this.height, 0x80404040);
+        guiGraphics.fill(0, 0, leftPanelWidth, this.height, 0xFF1A1A1A);
+        guiGraphics.fill(leftPanelWidth, 0, this.width, this.height, 0xFF2D2D2D);
 
-        // Render all widgets (mod selector button, multiblock list, select button)
+        // Draw border around multiblock list area
+        int listX = MARGIN;
+        int listW = leftPanelWidth - MARGIN * 2;
+        int listBottom = listStartY + multiblockList.getHeight();
+        drawBorder(guiGraphics, listX - 1, listStartY - 1, listX + listW + 1, listBottom + 1, 0xFF555555);
+
+        // Draw requirements panel (always visible for fabricators)
+        if (isFabricator && requirementsPanel != null) {
+            int reqPanelY = listBottom + 6;
+            int reqPanelBottom = selectButtonY - 4;
+
+            // "Requirements:" title
+            guiGraphics.drawString(this.font, "Requirements:", listX + 4, reqPanelY + 2, 0xFFFFFF);
+
+            // Border around the scrollable requirements list area
+            int reqTitleHeight = 14;
+            int statusHeight = RequirementsPanel.getStatusLinesHeight();
+            int reqListY = reqPanelY + reqTitleHeight;
+            int reqListBottom = reqPanelBottom - statusHeight - 4;
+            drawBorder(guiGraphics, listX - 1, reqListY - 1, listX + listW + 1, reqListBottom + 1, 0xFF555555);
+
+            // Status lines (FE, energy, chest) pinned at bottom with extra spacing
+            int statusY = reqPanelBottom - statusHeight + 2;
+            requirementsPanel.renderStatusLines(guiGraphics, listX, statusY, listW);
+        }
+
+        // Render all widgets (mod selector button, multiblock list, select button, req list)
         super.render(guiGraphics, mouseX, mouseY, partialTick);
 
         // Draw vertical separator
@@ -329,6 +417,17 @@ public class ProjectorScreen extends Screen {
     }
 
     @Override
+    public void tick() {
+        super.tick();
+        if (clipboardCooldown > 0) {
+            clipboardCooldown--;
+            if (clipboardCooldown == 0 && clipboardButton != null) {
+                clipboardButton.active = hasClipboardInInventory() && requirementsPanel != null && requirementsPanel.hasRequirements();
+            }
+        }
+    }
+
+    @Override
     public void onClose() {
         // If the screen closes without a multiblock being selected (e.g. ESC, game quit),
         // reset mode from MULTIBLOCK_SELECTION back to NOTHING_SELECTED so the item
@@ -375,6 +474,47 @@ public class ProjectorScreen extends Screen {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    private void addRequirementsToClipboard() {
+        if (requirementsPanel == null || !requirementsPanel.hasRequirements()) return;
+
+        var entries = new java.util.ArrayList<com.multiblockprojector.common.network.MessageClipboardWrite.EntryData>();
+        for (var req : requirementsPanel.getRequirements()) {
+            var blockId = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(req.block());
+            entries.add(new com.multiblockprojector.common.network.MessageClipboardWrite.EntryData(
+                blockId, req.needed(), req.have()
+            ));
+        }
+        com.multiblockprojector.common.network.MessageClipboardWrite.sendToServer(entries);
+
+        // Disable button briefly as visual feedback
+        if (clipboardButton != null) {
+            clipboardButton.active = false;
+            clipboardCooldown = 20; // Re-enable after 1 second
+        }
+        this.setFocused(null);
+    }
+
+    private boolean hasClipboardInInventory() {
+        var player = Minecraft.getInstance().player;
+        if (player == null) return false;
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack stack = inv.getItem(i);
+            if (!stack.isEmpty() && stack.getItem() instanceof net.minecraft.world.item.BlockItem blockItem
+                && blockItem.getBlock() instanceof com.simibubi.create.content.equipment.clipboard.ClipboardBlock) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void drawBorder(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
+        graphics.fill(x1, y1, x2, y1 + 1, color);     // top
+        graphics.fill(x1, y2 - 1, x2, y2, color);      // bottom
+        graphics.fill(x1, y1, x1 + 1, y2, color);       // left
+        graphics.fill(x2 - 1, y1, x2, y2, color);       // right
     }
 
     @Override

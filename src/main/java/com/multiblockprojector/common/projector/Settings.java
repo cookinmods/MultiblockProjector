@@ -34,6 +34,10 @@ public class Settings {
     public static final String KEY_AUTO_BUILD = "autoBuild";
     public static final String KEY_SIZE_PRESET = "sizePreset";
     public static final String KEY_SOURCE = "source";
+    public static final String KEY_LINKED_ENERGY = "linked_energy";
+    public static final String KEY_LINKED_CHEST = "linked_chest";
+    public static final String KEY_STORED_ENERGY = "stored_energy";
+    public static final String KEY_DIMENSION = "dim";
 
     private Mode mode;
     private Rotation rotation;
@@ -43,6 +47,11 @@ public class Settings {
     private boolean isPlaced;
     private int sizePresetIndex = 0;
     private Source source = Source.REGISTRY;
+    private BlockPos linkedEnergyPos = null;
+    private ResourceLocation linkedEnergyDim = null;
+    private BlockPos linkedChestPos = null;
+    private ResourceLocation linkedChestDim = null;
+    private int storedEnergy = 0;
     
     public Settings() {
         this(new CompoundTag());
@@ -91,6 +100,24 @@ public class Settings {
                 int z = pos.getInt("z");
                 this.pos = new BlockPos(x, y, z);
             }
+
+            if (settingsNbt.contains(KEY_LINKED_ENERGY, Tag.TAG_COMPOUND)) {
+                CompoundTag energy = settingsNbt.getCompound(KEY_LINKED_ENERGY);
+                this.linkedEnergyPos = new BlockPos(energy.getInt("x"), energy.getInt("y"), energy.getInt("z"));
+                if (energy.contains(KEY_DIMENSION, Tag.TAG_STRING)) {
+                    this.linkedEnergyDim = ResourceLocation.parse(energy.getString(KEY_DIMENSION));
+                }
+            }
+
+            if (settingsNbt.contains(KEY_LINKED_CHEST, Tag.TAG_COMPOUND)) {
+                CompoundTag chest = settingsNbt.getCompound(KEY_LINKED_CHEST);
+                this.linkedChestPos = new BlockPos(chest.getInt("x"), chest.getInt("y"), chest.getInt("z"));
+                if (chest.contains(KEY_DIMENSION, Tag.TAG_STRING)) {
+                    this.linkedChestDim = ResourceLocation.parse(chest.getString(KEY_DIMENSION));
+                }
+            }
+
+            this.storedEnergy = settingsNbt.getInt(KEY_STORED_ENERGY);
         }
     }
     
@@ -180,6 +207,35 @@ public class Settings {
     public int getSizePresetIndex() { return this.sizePresetIndex; }
     public void setSizePresetIndex(int index) { this.sizePresetIndex = Math.max(0, index); }
 
+    @Nullable
+    public BlockPos getLinkedEnergyPos() { return this.linkedEnergyPos; }
+    public void setLinkedEnergyPos(@Nullable BlockPos pos) { this.linkedEnergyPos = pos; }
+
+    @Nullable
+    public ResourceLocation getLinkedEnergyDim() { return this.linkedEnergyDim; }
+    public void setLinkedEnergyDim(@Nullable ResourceLocation dim) { this.linkedEnergyDim = dim; }
+
+    @Nullable
+    public BlockPos getLinkedChestPos() { return this.linkedChestPos; }
+    public void setLinkedChestPos(@Nullable BlockPos pos) { this.linkedChestPos = pos; }
+
+    @Nullable
+    public ResourceLocation getLinkedChestDim() { return this.linkedChestDim; }
+    public void setLinkedChestDim(@Nullable ResourceLocation dim) { this.linkedChestDim = dim; }
+
+    public int getStoredEnergy() { return this.storedEnergy; }
+    public void setStoredEnergy(int energy) { this.storedEnergy = Math.max(0, energy); }
+
+    public void setLinkedEnergy(@Nullable BlockPos pos, @Nullable ResourceLocation dim) {
+        this.linkedEnergyPos = pos;
+        this.linkedEnergyDim = dim;
+    }
+
+    public void setLinkedChest(@Nullable BlockPos pos, @Nullable ResourceLocation dim) {
+        this.linkedChestPos = pos;
+        this.linkedChestDim = dim;
+    }
+
     public CompoundTag toNbt() {
         CompoundTag nbt = new CompoundTag();
         nbt.putInt(KEY_MODE, this.mode.ordinal());
@@ -199,6 +255,32 @@ public class Settings {
             pos.putInt("y", this.pos.getY());
             pos.putInt("z", this.pos.getZ());
             nbt.put(KEY_POSITION, pos);
+        }
+
+        if (this.linkedEnergyPos != null) {
+            CompoundTag energy = new CompoundTag();
+            energy.putInt("x", this.linkedEnergyPos.getX());
+            energy.putInt("y", this.linkedEnergyPos.getY());
+            energy.putInt("z", this.linkedEnergyPos.getZ());
+            if (this.linkedEnergyDim != null) {
+                energy.putString(KEY_DIMENSION, this.linkedEnergyDim.toString());
+            }
+            nbt.put(KEY_LINKED_ENERGY, energy);
+        }
+
+        if (this.linkedChestPos != null) {
+            CompoundTag chest = new CompoundTag();
+            chest.putInt("x", this.linkedChestPos.getX());
+            chest.putInt("y", this.linkedChestPos.getY());
+            chest.putInt("z", this.linkedChestPos.getZ());
+            if (this.linkedChestDim != null) {
+                chest.putString(KEY_DIMENSION, this.linkedChestDim.toString());
+            }
+            nbt.put(KEY_LINKED_CHEST, chest);
+        }
+
+        if (this.storedEnergy > 0) {
+            nbt.putInt(KEY_STORED_ENERGY, this.storedEnergy);
         }
 
         return nbt;

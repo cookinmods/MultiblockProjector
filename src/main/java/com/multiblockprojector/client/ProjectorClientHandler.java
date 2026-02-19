@@ -2,8 +2,13 @@ package com.multiblockprojector.client;
 
 import com.multiblockprojector.UniversalProjector;
 import com.multiblockprojector.client.BlockValidationManager;
-import com.multiblockprojector.common.items.ProjectorItem;
+import com.multiblockprojector.common.items.AbstractProjectorItem;
+import com.multiblockprojector.common.items.BatteryFabricatorItem;
+import com.multiblockprojector.common.items.CreativeProjectorItem;
+import com.multiblockprojector.common.items.FabricatorItem;
 import com.multiblockprojector.common.network.MessageAutoBuild;
+import com.multiblockprojector.common.network.MessageFabricate;
+import com.multiblockprojector.common.network.MessageFabricationProgress;
 import com.multiblockprojector.common.projector.MultiblockProjection;
 import com.multiblockprojector.common.projector.Settings;
 import net.minecraft.client.Minecraft;
@@ -20,8 +25,6 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
-import net.neoforged.neoforge.event.level.BlockEvent;
-import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.network.chat.Component;
 
@@ -44,7 +47,7 @@ public class ProjectorClientHandler {
         // Always check for completed multiblocks regardless of held item
         checkAllBuildingProjectionsForCompletion(player, mc.level);
 
-        if (!(held.getItem() instanceof ProjectorItem)) {
+        if (!(held.getItem() instanceof AbstractProjectorItem)) {
             // Clear aim projection if not holding projector, but keep building projections
             if (lastAimPos != null) {
                 ProjectionManager.removeProjection(lastAimPos);
@@ -53,7 +56,7 @@ public class ProjectorClientHandler {
             return;
         }
 
-        Settings settings = ProjectorItem.getSettings(held);
+        Settings settings = AbstractProjectorItem.getSettings(held);
 
         // Clean up only aim projections that don't match current state
         cleanupAimProjections(settings);
@@ -62,7 +65,7 @@ public class ProjectorClientHandler {
             // Update projection position based on player aim
             updateProjectionAim(player, settings, mc.level);
         } else if (settings.getMode() == Settings.Mode.BUILDING && settings.getPos() != null && settings.getMultiblock() != null) {
-            // Validate blocks during building mode (but don't show error messages here since it's handled globally)
+            // Validate blocks during building mode
             MultiblockProjection projection = ProjectionManager.getProjection(settings.getPos());
             if (projection != null) {
                 BlockValidationManager.validateProjection(settings.getPos(), projection, mc.level);
@@ -80,67 +83,64 @@ public class ProjectorClientHandler {
     public static void onMouseClick(InputEvent.MouseButton.Pre event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
+        if (mc.screen != null) return; // Don't intercept input when a GUI is open
 
         Player player = mc.player;
         ItemStack held = player.getMainHandItem();
 
-        if (!(held.getItem() instanceof ProjectorItem)) return;
+        if (!(held.getItem() instanceof AbstractProjectorItem)) return;
 
-        Settings settings = ProjectorItem.getSettings(held);
+        Settings settings = AbstractProjectorItem.getSettings(held);
 
         if (settings.getMode() == Settings.Mode.PROJECTION && settings.getMultiblock() != null) {
             if (event.getAction() == 1) { // Mouse button press
-                if (event.getButton() == 0) { // Left click
+                if (event.getButton() == 0) { // Left click → rotate
                     if (lastAimPos != null) {
-                        if (player.isShiftKeyDown()) {
-                            // Sneak + Left Click: Auto-build (creative mode only)
-                            if (player.isCreative()) {
-                                autoBuildProjection(player, settings, held, lastAimPos);
-                            } else {
-                                player.displayClientMessage(
-                                    Component.literal("Auto-build only works in creative mode!")
-                                        .withStyle(net.minecraft.ChatFormatting.RED),
-                                    true
-                                );
-                            }
-                        } else {
-                            // Left Click: Place projection and enter building mode
-                            placeProjection(player, settings, held, lastAimPos);
-                        }
+                        settings.rotateCW();
+                        settings.applyTo(held);
+                        settings.sendPacketToServer(InteractionHand.MAIN_HAND);
+
+                        updateProjectionAtPos(lastAimPos, settings, player.level());
                         event.setCanceled(true);
                     }
-                } else if (event.getButton() == 1 && !player.isShiftKeyDown()) { // Right click (not sneak)
-                    // Right Click: Rotate projection
-                    settings.rotateCW();
-                    settings.applyTo(held);
-                    settings.sendPacketToServer(InteractionHand.MAIN_HAND);
-
-                    // Immediately update the projection with new rotation
+                } else if (event.getButton() == 1 && !player.isShiftKeyDown()) { // Right click → item action
                     if (lastAimPos != null) {
-                        updateProjectionAtPos(lastAimPos, settings, player.level());
+                        handleProjectionAction(player, held, settings, lastAimPos);
+                        event.setCanceled(true);
                     }
-
-                    event.setCanceled(true);
                 }
             }
         }
+    }
 
-        // Note: Building mode right-click cancellation is handled in ProjectorItem.use()
-        // to avoid conflicts with the use() method's right-click handling
+    /**
+     * Dispatch the projection action based on item type.
+     * Base ProjectorItem places projection; subclasses will auto-build or fabricate.
+     */
+    private static void handleProjectionAction(Player player, ItemStack held, Settings settings, BlockPos pos) {
+        if (held.getItem() instanceof CreativeProjectorItem) {
+            autoBuildProjection(player, settings, held, pos);
+        } else if (held.getItem() instanceof FabricatorItem || held.getItem() instanceof BatteryFabricatorItem) {
+            fabricateProjection(player, settings, held, pos);
+        } else {
+            // Base ProjectorItem — place projection and enter building mode
+            placeProjection(player, settings, held, pos);
+        }
     }
 
     @SubscribeEvent
     public static void onKeyInput(InputEvent.Key event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
+        if (mc.screen != null) return; // Don't intercept input when a GUI is open
 
         // Check for ESC key (key code 256)
         if (event.getKey() == 256 && event.getAction() == 1) { // 1 = key press
             Player player = mc.player;
             ItemStack held = player.getMainHandItem();
 
-            if (held.getItem() instanceof ProjectorItem) {
-                Settings settings = ProjectorItem.getSettings(held);
+            if (held.getItem() instanceof AbstractProjectorItem) {
+                Settings settings = AbstractProjectorItem.getSettings(held);
 
                 if (settings.getMode() == Settings.Mode.PROJECTION ||
                     settings.getMode() == Settings.Mode.BUILDING) {
@@ -163,10 +163,7 @@ public class ProjectorClientHandler {
                     }
 
                     settings.applyTo(held);
-                    settings.sendPacketToServer(net.minecraft.world.InteractionHand.MAIN_HAND);
-
-                    // Note: We can't prevent ESC from opening menu in key input,
-                    // but the mode change will still take effect
+                    settings.sendPacketToServer(InteractionHand.MAIN_HAND);
                 }
             }
         }
@@ -215,7 +212,7 @@ public class ProjectorClientHandler {
 
     private static void placeProjection(Player player, Settings settings, ItemStack held, BlockPos pos) {
         // Swing the projector for visual feedback FIRST
-        player.swing(InteractionHand.MAIN_HAND, true); // true = send to server too
+        player.swing(InteractionHand.MAIN_HAND, true);
 
         // Create the projection at the specified position
         var variant = MultiblockProjection.getVariantFromSettings(settings.getMultiblock(), settings);
@@ -243,6 +240,38 @@ public class ProjectorClientHandler {
                 settings.getMultiblock().displayName()).withStyle(net.minecraft.ChatFormatting.GOLD),
             true
         );
+    }
+
+    static void autoBuildProjection(Player player, Settings settings, ItemStack held, BlockPos pos) {
+        // Swing the projector for visual feedback
+        player.swing(InteractionHand.MAIN_HAND, true);
+
+        // Mark build active immediately so GUI is blocked before first progress packet
+        MessageFabricationProgress.setClientBuildActive(true);
+
+        // Send network message to server to perform auto-build
+        MessageAutoBuild.sendToServer(pos, InteractionHand.MAIN_HAND);
+
+        // Clear the aim projection immediately (server will handle settings changes)
+        if (lastAimPos != null) {
+            ProjectionManager.removeProjection(lastAimPos);
+            lastAimPos = null;
+        }
+    }
+
+    private static void fabricateProjection(Player player, Settings settings, ItemStack held, BlockPos pos) {
+        player.swing(InteractionHand.MAIN_HAND, true);
+
+        // Send fabrication request to server
+        // Note: don't set clientBuildActive eagerly here — server may reject (missing blocks/FE).
+        // The first MessageFabricationProgress from the server will set it.
+        MessageFabricate.sendToServer(pos, InteractionHand.MAIN_HAND);
+
+        // Clear ghost projections — server will handle the animated placement
+        if (lastAimPos != null) {
+            ProjectionManager.removeProjection(lastAimPos);
+            lastAimPos = null;
+        }
     }
 
     private static void updateProjectionAtPos(BlockPos pos, Settings settings, Level level) {
@@ -303,8 +332,8 @@ public class ProjectorClientHandler {
         // Check each projector in inventory for building mode projections
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
             ItemStack stack = player.getInventory().getItem(i);
-            if (stack.getItem() instanceof ProjectorItem) {
-                Settings settings = ProjectorItem.getSettings(stack);
+            if (stack.getItem() instanceof AbstractProjectorItem) {
+                Settings settings = AbstractProjectorItem.getSettings(stack);
 
                 if (settings.getMode() == Settings.Mode.BUILDING && settings.getPos() != null && settings.getMultiblock() != null) {
                     MultiblockProjection projection = ProjectionManager.getProjection(settings.getPos());
@@ -346,20 +375,6 @@ public class ProjectorClientHandler {
                     }
                 }
             }
-        }
-    }
-
-    private static void autoBuildProjection(Player player, Settings settings, ItemStack held, BlockPos pos) {
-        // Swing the projector for visual feedback
-        player.swing(InteractionHand.MAIN_HAND, true);
-
-        // Send network message to server to perform auto-build
-        MessageAutoBuild.sendToServer(pos, InteractionHand.MAIN_HAND);
-
-        // Clear the aim projection immediately (server will handle settings changes)
-        if (lastAimPos != null) {
-            ProjectionManager.removeProjection(lastAimPos);
-            lastAimPos = null;
         }
     }
 }
