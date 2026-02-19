@@ -481,8 +481,9 @@ public class ProjectorScreen extends Screen {
 
         var entries = new java.util.ArrayList<com.multiblockprojector.common.network.MessageClipboardWrite.EntryData>();
         for (var req : requirementsPanel.getRequirements()) {
+            var blockId = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(req.block());
             entries.add(new com.multiblockprojector.common.network.MessageClipboardWrite.EntryData(
-                req.name(), req.needed(), req.have()
+                blockId, req.needed(), req.have()
             ));
         }
         com.multiblockprojector.common.network.MessageClipboardWrite.sendToServer(entries);
