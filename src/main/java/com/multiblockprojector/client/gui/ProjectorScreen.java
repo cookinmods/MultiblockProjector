@@ -3,6 +3,8 @@ package com.multiblockprojector.client.gui;
 import com.multiblockprojector.api.MultiblockDefinition;
 import com.multiblockprojector.api.MultiblockDefinition.SizeVariant;
 import com.multiblockprojector.common.items.AbstractProjectorItem;
+import com.multiblockprojector.common.items.BatteryFabricatorItem;
+import com.multiblockprojector.common.items.FabricatorItem;
 import com.multiblockprojector.common.network.MessageProjectorSync;
 import com.multiblockprojector.common.projector.Settings;
 import com.multiblockprojector.client.schematic.SchematicIndex;
@@ -55,11 +57,15 @@ public class ProjectorScreen extends Screen {
     private Button sizeIncreaseButton;
 
     private SimpleMultiblockPreviewRenderer previewRenderer;
+    private RequirementsPanel requirementsPanel;
+    private final boolean isFabricator;
     private MultiblockDefinition selectedMultiblock;
     private boolean selectedIsSchematic = false;
     private ResourceLocation selectedSchematicId = null;
     private int currentSizePresetIndex = 0;
     private boolean isDragging = false;
+    private int selectButtonY;
+    private int requirementsPanelHeight;
 
     public ProjectorScreen(ItemStack projectorStack, InteractionHand hand) {
         super(Component.translatable("gui.multiblockprojector.projector"));
@@ -67,6 +73,11 @@ public class ProjectorScreen extends Screen {
         this.hand = hand;
         this.settings = AbstractProjectorItem.getSettings(projectorStack);
         this.previewRenderer = new SimpleMultiblockPreviewRenderer();
+        this.isFabricator = projectorStack.getItem() instanceof FabricatorItem
+            || projectorStack.getItem() instanceof BatteryFabricatorItem;
+        if (isFabricator) {
+            this.requirementsPanel = new RequirementsPanel(Minecraft.getInstance().font);
+        }
 
         var index = MultiblockIndex.get();
         var tabs = index.getTabs();
@@ -102,6 +113,7 @@ public class ProjectorScreen extends Screen {
         updateFilteredMultiblocks();
         selectedMultiblock = null;
         previewRenderer.setMultiblock(null);
+        if (requirementsPanel != null) requirementsPanel.clear();
         rebuildWidgets();
     }
 
@@ -125,8 +137,9 @@ public class ProjectorScreen extends Screen {
 
         // --- Calculate dynamic list area ---
         listStartY = TAB_SELECTOR_Y + TAB_SELECTOR_HEIGHT + 4;
-        int selectButtonY = this.height - 30;
-        int listHeight = selectButtonY - listStartY - 6;
+        selectButtonY = this.height - 30;
+        requirementsPanelHeight = (isFabricator && selectedMultiblock != null) ? 140 : 0;
+        int listHeight = selectButtonY - listStartY - 6 - requirementsPanelHeight;
 
         // --- Multiblock list (AbstractSelectionList) ---
         multiblockList = new MultiblockListWidget(this.minecraft, leftPanelWidth, listHeight, listStartY, ENTRY_HEIGHT);
@@ -214,6 +227,9 @@ public class ProjectorScreen extends Screen {
     private void updatePreviewWithSize(MultiblockDefinition multiblock) {
         var variant = multiblock.variants().get(currentSizePresetIndex);
         previewRenderer.setMultiblock(multiblock, variant);
+        if (isFabricator && requirementsPanel != null) {
+            requirementsPanel.update(multiblock, currentSizePresetIndex, projectorStack);
+        }
     }
 
     private void selectMultiblockForPreview(MultiblockDefinition multiblock) {
@@ -235,6 +251,11 @@ public class ProjectorScreen extends Screen {
         if (sizeIncreaseButton != null) sizeIncreaseButton.visible = showSizeButtons;
         if (showSizeButtons) {
             updateSizeButtons(multiblock);
+        }
+
+        if (isFabricator && requirementsPanel != null) {
+            requirementsPanel.update(multiblock, currentSizePresetIndex, projectorStack);
+            rebuildWidgets(); // Rebuild to adjust list height
         }
     }
 
@@ -280,6 +301,14 @@ public class ProjectorScreen extends Screen {
 
         // Render all widgets (mod selector button, multiblock list, select button)
         super.render(guiGraphics, mouseX, mouseY, partialTick);
+
+        // Render requirements panel for fabricator items
+        if (isFabricator && requirementsPanel != null && requirementsPanel.hasRequirements()) {
+            int reqY = listStartY + multiblockList.getHeight() + 4;
+            int reqWidth = leftPanelWidth - MARGIN * 2;
+            int reqMaxHeight = selectButtonY - reqY - 4;
+            requirementsPanel.render(guiGraphics, MARGIN, reqY, reqWidth, reqMaxHeight);
+        }
 
         // Draw vertical separator
         guiGraphics.fill(leftPanelWidth, 0, leftPanelWidth + 2, this.height, 0xFF555555);
