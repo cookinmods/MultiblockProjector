@@ -475,10 +475,8 @@ public class ProjectorScreen extends Screen {
         }
         com.multiblockprojector.common.network.MessageClipboardWrite.sendToServer(entries);
 
-        // Unfocus button so it doesn't look stuck
-        if (clipboardButton != null) {
-            clipboardButton.setFocused(false);
-        }
+        // Clear screen focus so button doesn't look stuck highlighted
+        this.setFocused(null);
 
         // Show confirmation in chat (action bar is hidden behind solid GUI background)
         if (minecraft.player != null) {
