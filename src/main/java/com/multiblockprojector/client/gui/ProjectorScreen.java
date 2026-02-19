@@ -153,12 +153,23 @@ public class ProjectorScreen extends Screen {
             int reqPanelY = listStartY + listHeight + 6;
             int statusHeight = RequirementsPanel.getStatusLinesHeight();
             int reqTitleHeight = 14; // "Requirements:" title line
-            int reqListHeight = requirementsPanelHeight - statusHeight - reqTitleHeight - 4;
+            int reqListHeight = requirementsPanelHeight - statusHeight - reqTitleHeight - 8;
             int reqListY = reqPanelY + reqTitleHeight;
             int reqWidth = leftPanelWidth - MARGIN * 2;
 
             var reqListWidget = requirementsPanel.createListWidget(MARGIN, reqWidth, reqListY, reqListHeight);
             this.addRenderableWidget(reqListWidget);
+
+            // "Add to Clipboard" button — only if Create is installed
+            if (net.neoforged.fml.ModList.get().isLoaded("create")) {
+                int btnWidth = font.width("Add to Clipboard") + 8;
+                int btnX = MARGIN + reqWidth - btnWidth;
+                int btnY = reqPanelY;
+                this.addRenderableWidget(Button.builder(
+                    Component.literal("Add to Clipboard"),
+                    btn -> addRequirementsToClipboard()
+                ).bounds(btnX, btnY, btnWidth, 14).build());
+            }
         }
 
         // --- Select button pinned to bottom ---
@@ -321,18 +332,23 @@ public class ProjectorScreen extends Screen {
         int listBottom = listStartY + multiblockList.getHeight();
         drawBorder(guiGraphics, listX - 1, listStartY - 1, listX + listW + 1, listBottom + 1, 0xFF555555);
 
-        // Draw border and content for requirements panel
+        // Draw content for requirements panel
         if (isFabricator && requirementsPanel != null && requirementsPanel.hasRequirements()) {
             int reqPanelY = listBottom + 6;
             int reqPanelBottom = selectButtonY - 4;
-            drawBorder(guiGraphics, listX - 1, reqPanelY - 1, listX + listW + 1, reqPanelBottom + 1, 0xFF555555);
 
             // "Requirements:" title
             guiGraphics.drawString(this.font, "Requirements:", listX + 4, reqPanelY + 2, 0xFFFFFF);
 
-            // Status lines (FE, energy, chest) pinned at bottom of the panel
+            // Border around the scrollable requirements list area
+            int reqTitleHeight = 14;
             int statusHeight = RequirementsPanel.getStatusLinesHeight();
-            int statusY = reqPanelBottom - statusHeight;
+            int reqListY = reqPanelY + reqTitleHeight;
+            int reqListBottom = reqPanelBottom - statusHeight - 4;
+            drawBorder(guiGraphics, listX - 1, reqListY - 1, listX + listW + 1, reqListBottom + 1, 0xFF555555);
+
+            // Status lines (FE, energy, chest) pinned at bottom with extra spacing
+            int statusY = reqPanelBottom - statusHeight + 2;
             requirementsPanel.renderStatusLines(guiGraphics, listX, statusY, listW);
         }
 
@@ -433,6 +449,10 @@ public class ProjectorScreen extends Screen {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    private void addRequirementsToClipboard() {
+        // TODO: Add block requirements to Create mod's clipboard item
     }
 
     private static void drawBorder(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
