@@ -99,10 +99,5 @@ public class MessageClipboardWrite implements CustomPacketPayload {
             false
         );
         clipboard.set(AllDataComponents.CLIPBOARD_CONTENT, content);
-
-        player.displayClientMessage(
-            Component.literal("Requirements added to clipboard").withStyle(ChatFormatting.GREEN),
-            true
-        );
     }
 }

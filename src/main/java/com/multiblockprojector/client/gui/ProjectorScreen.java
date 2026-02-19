@@ -474,6 +474,20 @@ public class ProjectorScreen extends Screen {
             ));
         }
         com.multiblockprojector.common.network.MessageClipboardWrite.sendToServer(entries);
+
+        // Unfocus button so it doesn't look stuck
+        if (clipboardButton != null) {
+            clipboardButton.setFocused(false);
+        }
+
+        // Show confirmation in chat (action bar is hidden behind solid GUI background)
+        if (minecraft.player != null) {
+            minecraft.player.displayClientMessage(
+                Component.literal("Requirements added to clipboard")
+                    .withStyle(net.minecraft.ChatFormatting.GREEN),
+                false
+            );
+        }
     }
 
     private boolean hasClipboardInInventory() {
