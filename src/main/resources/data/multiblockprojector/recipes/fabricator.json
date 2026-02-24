@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "DDD",
+    "DPD",
+    "DDD"
+  ],
+  "key": {
+    "D": {
+      "item": "minecraft:diamond"
+    },
+    "P": {
+      "item": "multiblockprojector:projector"
+    }
+  },
+  "result": {
+    "id": "multiblockprojector:fabricator",
+    "count": 1
+  }
+}
