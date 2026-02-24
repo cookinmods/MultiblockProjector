@@ -65,11 +65,16 @@ public class ProjectorClientHandler {
             // Update projection position based on player aim
             updateProjectionAim(player, settings, mc.level);
         } else if (settings.getMode() == Settings.Mode.BUILDING && settings.getPos() != null && settings.getMultiblock() != null) {
-            // Validate blocks during building mode
+            // Validate blocks during building mode, recreating projection if it was removed
             MultiblockProjection projection = ProjectionManager.getProjection(settings.getPos());
-            if (projection != null) {
-                BlockValidationManager.validateProjection(settings.getPos(), projection, mc.level);
+            if (projection == null) {
+                var variant = MultiblockProjection.getVariantFromSettings(settings.getMultiblock(), settings);
+                projection = new MultiblockProjection(mc.level, settings.getMultiblock(), variant);
+                projection.setRotation(settings.getRotation());
+                projection.setFlip(settings.isMirrored());
+                ProjectionManager.setProjection(settings.getPos(), projection);
             }
+            BlockValidationManager.validateProjection(settings.getPos(), projection, mc.level);
         } else {
             // Clear projection if not in projection mode
             if (lastAimPos != null) {
@@ -304,25 +309,17 @@ public class ProjectorClientHandler {
     }
 
     /**
-     * Clean up only aim projections that don't match current projector state
+     * Clean up only aim projections that don't match current projector state.
+     * Never touches building projections owned by other projectors in the inventory.
      */
     private static void cleanupAimProjections(Settings settings) {
-        if (settings.getMode() == Settings.Mode.NOTHING_SELECTED) {
-            // No projections should exist in nothing selected mode
-            clearAllProjections();
-            return;
-        }
-
-        if (settings.getMode() == Settings.Mode.BUILDING) {
-            // Clear any aim projection when in building mode
+        // Always clear the aim-following projection when not in PROJECTION mode
+        if (settings.getMode() != Settings.Mode.PROJECTION) {
             if (lastAimPos != null) {
                 ProjectionManager.removeProjection(lastAimPos);
                 lastAimPos = null;
             }
-            return;
         }
-
-        // For PROJECTION mode and others, normal aim projection handling continues
     }
 
     /**
@@ -337,41 +334,48 @@ public class ProjectorClientHandler {
 
                 if (settings.getMode() == Settings.Mode.BUILDING && settings.getPos() != null && settings.getMultiblock() != null) {
                     MultiblockProjection projection = ProjectionManager.getProjection(settings.getPos());
-                    if (projection != null) {
-                        // Validate projection and check for new incorrect blocks
-                        boolean hasNewIncorrectBlocks = BlockValidationManager.validateProjection(settings.getPos(), projection, level);
+                    if (projection == null) {
+                        // Recreate projection if it was removed (e.g. distance cleanup)
+                        var variant = MultiblockProjection.getVariantFromSettings(settings.getMultiblock(), settings);
+                        projection = new MultiblockProjection(level, settings.getMultiblock(), variant);
+                        projection.setRotation(settings.getRotation());
+                        projection.setFlip(settings.isMirrored());
+                        ProjectionManager.setProjection(settings.getPos(), projection);
+                    }
 
-                        // Show error message if new incorrect blocks were placed
-                        if (hasNewIncorrectBlocks) {
-                            player.displayClientMessage(
-                                Component.literal("Incorrect block placed!")
-                                    .withStyle(net.minecraft.ChatFormatting.RED),
-                                true
-                            );
-                        }
+                    // Validate projection and check for new incorrect blocks
+                    boolean hasNewIncorrectBlocks = BlockValidationManager.validateProjection(settings.getPos(), projection, level);
 
-                        // Check if projection is complete
-                        if (BlockValidationManager.isProjectionComplete(settings.getPos(), projection, level)) {
-                            // Store the position before clearing settings
-                            BlockPos completedPos = settings.getPos();
+                    // Show error message if new incorrect blocks were placed
+                    if (hasNewIncorrectBlocks) {
+                        player.displayClientMessage(
+                            Component.literal("Incorrect block placed!")
+                                .withStyle(net.minecraft.ChatFormatting.RED),
+                            true
+                        );
+                    }
 
-                            // Projection is complete - return to nothing selected mode
-                            settings.setMode(Settings.Mode.NOTHING_SELECTED);
-                            settings.setPos(null);
-                            settings.setPlaced(false);
-                            settings.applyTo(stack);
+                    // Check if projection is complete
+                    if (BlockValidationManager.isProjectionComplete(settings.getPos(), projection, level)) {
+                        // Store the position before clearing settings
+                        BlockPos completedPos = settings.getPos();
 
-                            // Clear projection and validation data using stored position
-                            ProjectionManager.removeProjection(completedPos);
-                            BlockValidationManager.clearValidation(completedPos);
+                        // Projection is complete - return to nothing selected mode
+                        settings.setMode(Settings.Mode.NOTHING_SELECTED);
+                        settings.setPos(null);
+                        settings.setPlaced(false);
+                        settings.applyTo(stack);
 
-                            // Show completion message with green color
-                            player.displayClientMessage(
-                                Component.literal("Multiblock structure completed!")
-                                    .withStyle(net.minecraft.ChatFormatting.GREEN),
-                                true
-                            );
-                        }
+                        // Clear projection and validation data using stored position
+                        ProjectionManager.removeProjection(completedPos);
+                        BlockValidationManager.clearValidation(completedPos);
+
+                        // Show completion message with green color
+                        player.displayClientMessage(
+                            Component.literal("Multiblock structure completed!")
+                                .withStyle(net.minecraft.ChatFormatting.GREEN),
+                            true
+                        );
                     }
                 }
             }
