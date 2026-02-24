@@ -77,9 +77,7 @@ public class ProjectorScreen extends Screen {
         this.previewRenderer = new SimpleMultiblockPreviewRenderer();
         this.isFabricator = projectorStack.getItem() instanceof FabricatorItem
             || projectorStack.getItem() instanceof BatteryFabricatorItem;
-        if (isFabricator) {
-            this.requirementsPanel = new RequirementsPanel(Minecraft.getInstance().font);
-        }
+        this.requirementsPanel = new RequirementsPanel(Minecraft.getInstance().font);
 
         var index = MultiblockIndex.get();
         var tabs = index.getTabs();
@@ -143,7 +141,7 @@ public class ProjectorScreen extends Screen {
         // --- Calculate dynamic list area ---
         listStartY = TAB_SELECTOR_Y + TAB_SELECTOR_HEIGHT + 4;
         selectButtonY = this.height - 30;
-        requirementsPanelHeight = isFabricator ? 140 : 0;
+        requirementsPanelHeight = isFabricator ? 140 : 140 - RequirementsPanel.getStatusLinesHeight();
         int listHeight = selectButtonY - listStartY - 6 - requirementsPanelHeight;
 
         // --- Multiblock list (AbstractSelectionList) ---
@@ -152,31 +150,29 @@ public class ProjectorScreen extends Screen {
         refreshListEntries();
         this.addRenderableWidget(multiblockList);
 
-        // --- Requirements scrollable list (fabricator only, always visible) ---
-        if (isFabricator && requirementsPanel != null) {
-            requirementsPanel.updateBasicInfo(projectorStack);
-            int reqPanelY = listStartY + listHeight + 6;
-            int statusHeight = RequirementsPanel.getStatusLinesHeight();
-            int reqTitleHeight = 14; // "Requirements:" title line
-            int reqListHeight = requirementsPanelHeight - statusHeight - reqTitleHeight - 8;
-            int reqListY = reqPanelY + reqTitleHeight;
-            int reqWidth = leftPanelWidth - MARGIN * 2;
+        // --- Requirements scrollable list (always visible) ---
+        requirementsPanel.updateBasicInfo(projectorStack);
+        int reqPanelY = listStartY + listHeight + 6;
+        int statusHeight = isFabricator ? RequirementsPanel.getStatusLinesHeight() : 0;
+        int reqTitleHeight = 14; // "Requirements:" title line
+        int reqListHeight = requirementsPanelHeight - statusHeight - reqTitleHeight - 8;
+        int reqListY = reqPanelY + reqTitleHeight;
+        int reqWidth = leftPanelWidth - MARGIN * 2;
 
-            var reqListWidget = requirementsPanel.createListWidget(MARGIN, reqWidth, reqListY, reqListHeight);
-            this.addRenderableWidget(reqListWidget);
+        var reqListWidget = requirementsPanel.createListWidget(MARGIN, reqWidth, reqListY, reqListHeight);
+        this.addRenderableWidget(reqListWidget);
 
-            // "Add to Clipboard" button — only if Create is installed
-            if (net.neoforged.fml.ModList.get().isLoaded("create")) {
-                int btnWidth = font.width("Add to Clipboard") + 8;
-                int btnX = MARGIN + reqWidth - btnWidth;
-                int btnY = reqPanelY + 1;
-                clipboardButton = Button.builder(
-                    Component.literal("Add to Clipboard"),
-                    btn -> addRequirementsToClipboard()
-                ).bounds(btnX, btnY, btnWidth, 12).build();
-                clipboardButton.active = hasClipboardInInventory() && requirementsPanel.hasRequirements();
-                this.addRenderableWidget(clipboardButton);
-            }
+        // "Add to Clipboard" button — only if Create is installed
+        if (net.neoforged.fml.ModList.get().isLoaded("create")) {
+            int btnWidth = font.width("Add to Clipboard") + 8;
+            int btnX = MARGIN + reqWidth - btnWidth;
+            int btnY = reqPanelY + 1;
+            clipboardButton = Button.builder(
+                Component.literal("Add to Clipboard"),
+                btn -> addRequirementsToClipboard()
+            ).bounds(btnX, btnY, btnWidth, 12).build();
+            clipboardButton.active = hasClipboardInInventory() && requirementsPanel.hasRequirements();
+            this.addRenderableWidget(clipboardButton);
         }
 
         // --- Select button pinned to bottom ---
@@ -260,11 +256,9 @@ public class ProjectorScreen extends Screen {
     private void updatePreviewWithSize(MultiblockDefinition multiblock) {
         var variant = multiblock.variants().get(currentSizePresetIndex);
         previewRenderer.setMultiblock(multiblock, variant);
-        if (isFabricator && requirementsPanel != null) {
-            requirementsPanel.update(multiblock, currentSizePresetIndex, projectorStack);
-            requirementsPanel.refreshEntries();
-            updateClipboardButtonState();
-        }
+        requirementsPanel.update(multiblock, currentSizePresetIndex, projectorStack);
+        requirementsPanel.refreshEntries();
+        updateClipboardButtonState();
     }
 
     private void updateClipboardButtonState() {
@@ -294,10 +288,8 @@ public class ProjectorScreen extends Screen {
             updateSizeButtons(multiblock);
         }
 
-        if (isFabricator && requirementsPanel != null) {
-            requirementsPanel.update(multiblock, currentSizePresetIndex, projectorStack);
-            rebuildWidgets(); // Rebuild to adjust list height
-        }
+        requirementsPanel.update(multiblock, currentSizePresetIndex, projectorStack);
+        rebuildWidgets(); // Rebuild to adjust list height
     }
 
     private void selectMultiblock(MultiblockDefinition multiblock) {
@@ -346,8 +338,8 @@ public class ProjectorScreen extends Screen {
         int listBottom = listStartY + multiblockList.getHeight();
         drawBorder(guiGraphics, listX - 1, listStartY - 1, listX + listW + 1, listBottom + 1, 0xFF555555);
 
-        // Draw requirements panel (always visible for fabricators)
-        if (isFabricator && requirementsPanel != null) {
+        // Draw requirements panel (always visible)
+        {
             int reqPanelY = listBottom + 6;
             int reqPanelBottom = selectButtonY - 4;
 
@@ -356,14 +348,16 @@ public class ProjectorScreen extends Screen {
 
             // Border around the scrollable requirements list area
             int reqTitleHeight = 14;
-            int statusHeight = RequirementsPanel.getStatusLinesHeight();
+            int statusHeight = isFabricator ? RequirementsPanel.getStatusLinesHeight() : 0;
             int reqListY = reqPanelY + reqTitleHeight;
             int reqListBottom = reqPanelBottom - statusHeight - 4;
             drawBorder(guiGraphics, listX - 1, reqListY - 1, listX + listW + 1, reqListBottom + 1, 0xFF555555);
 
-            // Status lines (FE, energy, chest) pinned at bottom with extra spacing
-            int statusY = reqPanelBottom - statusHeight + 2;
-            requirementsPanel.renderStatusLines(guiGraphics, listX, statusY, listW);
+            // Status lines (FE, energy, chest) pinned at bottom — fabricators only
+            if (isFabricator) {
+                int statusY = reqPanelBottom - statusHeight + 2;
+                requirementsPanel.renderStatusLines(guiGraphics, listX, statusY, listW);
+            }
         }
 
         // Render all widgets (mod selector button, multiblock list, select button, req list)
