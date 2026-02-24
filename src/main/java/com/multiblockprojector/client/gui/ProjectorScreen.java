@@ -269,6 +269,7 @@ public class ProjectorScreen extends Screen {
 
     private void selectMultiblockForPreview(MultiblockDefinition multiblock) {
         this.selectedMultiblock = multiblock;
+        this.previewRenderer.resetZoom();
         var schematicIndex = SchematicIndex.get();
         this.selectedIsSchematic = schematicIndex.hasTab(multiblock.modId());
         this.selectedSchematicId = selectedIsSchematic ? schematicIndex.getSchematicId(multiblock) : null;
@@ -513,6 +514,10 @@ public class ProjectorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (mouseX > leftPanelWidth) {
+            previewRenderer.onMouseScrolled(scrollY);
+            return true;
+        }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 

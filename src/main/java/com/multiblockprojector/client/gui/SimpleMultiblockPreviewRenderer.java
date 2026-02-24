@@ -25,6 +25,7 @@ public class SimpleMultiblockPreviewRenderer {
     private BlockPos size;
 
     private float scale = 50f;
+    private float zoomMultiplier = 1.0f;
     private float rotationX = 25f;
     private float rotationY = -45f;
     private boolean canTick = true;
@@ -114,7 +115,8 @@ public class SimpleMultiblockPreviewRenderer {
             RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 0.8f);
 
             poseStack.translate(centerX, centerY, 100);
-            poseStack.scale(scale, -scale, scale);
+            float effectiveScale = scale * zoomMultiplier;
+            poseStack.scale(effectiveScale, -effectiveScale, effectiveScale);
 
             Transformation transform = new Transformation(
                 null,
@@ -199,6 +201,14 @@ public class SimpleMultiblockPreviewRenderer {
             graphics.drawString(Minecraft.getInstance().font, sizeText,
                 x + 5, infoY + 20, 0xAAAAAA);
         }
+    }
+
+    public void onMouseScrolled(double scrollY) {
+        zoomMultiplier = Mth.clamp(zoomMultiplier + (float)(scrollY * 0.1), 0.5f, 3.0f);
+    }
+
+    public void resetZoom() {
+        zoomMultiplier = 1.0f;
     }
 
     public void onMouseDragged(double mouseX, double mouseY, double deltaX, double deltaY) {
