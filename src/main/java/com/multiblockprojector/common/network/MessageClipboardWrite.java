@@ -6,10 +6,13 @@ import com.simibubi.create.content.equipment.clipboard.ClipboardContent;
 import com.simibubi.create.content.equipment.clipboard.ClipboardEntry;
 import com.simibubi.create.content.equipment.clipboard.ClipboardOverrides;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -22,12 +25,13 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import static com.multiblockprojector.UniversalProjector.rl;
 
 /**
  * Client→Server packet to write block requirements to a Create clipboard in the player's inventory.
- * Produces icon-rich entries matching Create's Material Checklist format.
+ * Produces entries matching Create's Material Checklist format exactly.
  */
 public class MessageClipboardWrite implements CustomPacketPayload {
 
@@ -87,33 +91,72 @@ public class MessageClipboardWrite implements CustomPacketPayload {
 
         ItemStack clipboard = inv.getItem(clipboardSlot);
 
-        // Build clipboard entries with item icons, matching Create's Material Checklist format
-        List<List<ClipboardEntry>> pages = new ArrayList<>();
-        List<ClipboardEntry> currentPage = new ArrayList<>();
+        // Sort entries alphabetically by display name, incomplete first then completed
+        List<EntryData> incomplete = new ArrayList<>();
+        List<EntryData> completed = new ArrayList<>();
 
         for (EntryData entry : packet.entries) {
-            Block block = BuiltInRegistries.BLOCK.get(entry.blockId);
-            ItemStack icon = new ItemStack(block);
-            boolean checked = entry.have >= entry.needed;
-            int amount = entry.needed;
-
-            String name = icon.getHoverName().getString();
-            MutableComponent text = Component.literal(name + " x " + amount);
-
-            ClipboardEntry clipEntry = new ClipboardEntry(checked, text);
-            clipEntry.icon = icon;
-            clipEntry.itemAmount = amount;
-
-            currentPage.add(clipEntry);
-
-            // Paginate at MAX_ENTRIES_PER_PAGE
-            if (currentPage.size() >= MAX_ENTRIES_PER_PAGE) {
-                pages.add(currentPage);
-                currentPage = new ArrayList<>();
+            int remaining = entry.needed - entry.have;
+            if (remaining <= 0) {
+                completed.add(entry);
+            } else {
+                incomplete.add(entry);
             }
         }
 
-        // Add remaining entries
+        incomplete.sort((a, b) -> {
+            String nameA = getItemName(a.blockId).toLowerCase(Locale.ENGLISH);
+            String nameB = getItemName(b.blockId).toLowerCase(Locale.ENGLISH);
+            return nameA.compareTo(nameB);
+        });
+        completed.sort((a, b) -> {
+            String nameA = getItemName(a.blockId).toLowerCase(Locale.ENGLISH);
+            String nameB = getItemName(b.blockId).toLowerCase(Locale.ENGLISH);
+            return nameA.compareTo(nameB);
+        });
+
+        // Build clipboard pages matching Create's MaterialChecklist.createWrittenClipboard()
+        List<List<ClipboardEntry>> pages = new ArrayList<>();
+        List<ClipboardEntry> currentPage = new ArrayList<>();
+        int itemsWritten = 0;
+
+        // Incomplete items first (unchecked)
+        for (EntryData entry : incomplete) {
+            if (itemsWritten == MAX_ENTRIES_PER_PAGE) {
+                itemsWritten = 0;
+                currentPage.add(new ClipboardEntry(false,
+                    Component.literal(">>>").withStyle(ChatFormatting.DARK_GRAY)));
+                pages.add(currentPage);
+                currentPage = new ArrayList<>();
+            }
+            itemsWritten++;
+
+            int remaining = entry.needed - entry.have;
+            ItemStack icon = new ItemStack(BuiltInRegistries.BLOCK.get(entry.blockId));
+            currentPage.add(
+                new ClipboardEntry(false, formatEntry(icon, remaining, true))
+                    .displayItem(icon, remaining)
+            );
+        }
+
+        // Completed items second (checked)
+        for (EntryData entry : completed) {
+            if (itemsWritten == MAX_ENTRIES_PER_PAGE) {
+                itemsWritten = 0;
+                currentPage.add(new ClipboardEntry(true,
+                    Component.literal(">>>").withStyle(ChatFormatting.DARK_GREEN)));
+                pages.add(currentPage);
+                currentPage = new ArrayList<>();
+            }
+            itemsWritten++;
+
+            ItemStack icon = new ItemStack(BuiltInRegistries.BLOCK.get(entry.blockId));
+            currentPage.add(
+                new ClipboardEntry(true, formatEntry(icon, entry.needed, false))
+                    .displayItem(icon, 0)
+            );
+        }
+
         if (!currentPage.isEmpty()) {
             pages.add(currentPage);
         }
@@ -123,8 +166,35 @@ public class MessageClipboardWrite implements CustomPacketPayload {
         ClipboardContent content = new ClipboardContent(
             ClipboardOverrides.ClipboardType.WRITTEN,
             pages,
-            true // readOnly, matching Create's material checklist
+            true
         );
         clipboard.set(AllDataComponents.CLIPBOARD_CONTENT, content);
+        clipboard.set(DataComponents.CUSTOM_NAME,
+            Component.translatable("create.materialChecklist")
+                .setStyle(Style.EMPTY.withItalic(false)));
+    }
+
+    /**
+     * Formats a clipboard entry's text to match Create's MaterialChecklist.entry() output.
+     * Multi-line: item name (with hover tooltip) + newline + " x<amount> | <stacks>▤ +<remainder>"
+     */
+    private static MutableComponent formatEntry(ItemStack item, int amount, boolean unfinished) {
+        MutableComponent tc = Component.empty();
+
+        tc.append(Component.translatable(item.getDescriptionId())
+            .setStyle(Style.EMPTY.withHoverEvent(
+                new HoverEvent(HoverEvent.Action.SHOW_ITEM,
+                    new HoverEvent.ItemStackInfo(item)))));
+
+        if (!unfinished) {
+            tc.withStyle(ChatFormatting.DARK_GREEN);
+        }
+
+        return tc.append(Component.literal("\n x" + amount).withStyle(ChatFormatting.BLACK));
+    }
+
+    private static String getItemName(ResourceLocation blockId) {
+        Block block = BuiltInRegistries.BLOCK.get(blockId);
+        return new ItemStack(block).getHoverName().getString();
     }
 }
